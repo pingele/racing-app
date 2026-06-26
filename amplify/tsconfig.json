@@ -8,6 +8,7 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    "types": ["node"],
     "paths": {
       "$amplify/*": ["../.amplify/generated/*"]
     }
