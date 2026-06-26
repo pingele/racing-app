@@ -3,8 +3,11 @@ backend:
   phases:
     build:
       commands:
+        - 'echo "AWS_BRANCH=$AWS_BRANCH AWS_APP_ID=$AWS_APP_ID"'
+        - 'test -n "$AWS_BRANCH" || { echo "ERROR: AWS_BRANCH is empty"; exit 1; }'
+        - 'test -n "$AWS_APP_ID" || { echo "ERROR: AWS_APP_ID is empty"; exit 1; }'
         - npm install --cache .npm --prefer-offline --no-audit --no-fund
-        - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+        - 'npx ampx pipeline-deploy --debug --branch "$AWS_BRANCH" --app-id "$AWS_APP_ID"'
 frontend:
   phases:
     preBuild:
