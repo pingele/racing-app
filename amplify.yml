@@ -3,14 +3,14 @@ backend:
   phases:
     build:
       commands:
-        - npm ci --cache .npm --prefer-offline
+        - npm install --cache .npm --prefer-offline --no-audit --no-fund
         - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
 frontend:
   phases:
     preBuild:
       commands:
-        - npm ci --cache .npm --prefer-offline
-        - npm --prefix client ci --cache .npm --prefer-offline
+        - npm install --cache .npm --prefer-offline --no-audit --no-fund
+        - npm --prefix client install --cache .npm --prefer-offline --no-audit --no-fund
     build:
       commands:
         - npm --prefix client run build
