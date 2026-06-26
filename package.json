@@ -2,13 +2,27 @@
   "name": "racing-app",
   "private": true,
   "version": "1.0.0",
-  "description": "Racing Prediction PWA — single App Service deploy bundle",
+  "description": "Racing Prediction PWA — AWS Amplify Gen 2 deploy",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "rm -rf server/node_modules && npm install --prefix server && npm install --include=dev --prefix client && npm run build --prefix client",
-    "start": "node server/src/server.js",
-    "seed": "npm run seed --prefix server"
+    "build": "npm install --include=dev --prefix client && npm run build --prefix client",
+    "dev:client": "npm run dev --prefix client",
+    "amplify:sandbox": "npx ampx sandbox",
+    "amplify:sandbox:delete": "npx ampx sandbox delete"
+  },
+  "devDependencies": {
+    "@aws-amplify/backend": "^1.4.0",
+    "@aws-amplify/backend-cli": "^1.4.0",
+    "aws-cdk": "^2.158.0",
+    "aws-cdk-lib": "^2.158.0",
+    "constructs": "^10.3.0",
+    "esbuild": "^0.23.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  },
+  "dependencies": {
+    "aws-amplify": "^6.6.0"
   }
 }
