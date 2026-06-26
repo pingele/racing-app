@@ -1,0 +1,14 @@
+{
+  "name": "racing-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Racing Prediction PWA — single App Service deploy bundle",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf server/node_modules && npm install --prefix server && npm install --include=dev --prefix client && npm run build --prefix client",
+    "start": "node server/src/server.js",
+    "seed": "npm run seed --prefix server"
+  }
+}
