@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-amplify/ui-react": "^6.5.0",
+    "aws-amplify": "^6.6.0",
     "racing-app": "file:..",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

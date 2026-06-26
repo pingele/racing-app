@@ -1,42 +1,64 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { api } from '../api/client.js';
+import {
+  signIn,
+  signOut,
+  signUp,
+  autoSignIn,
+  getCurrentUser,
+  fetchUserAttributes,
+} from 'aws-amplify/auth';
 
 const AuthContext = createContext(null);
+
+async function loadCurrentUser() {
+  const { userId } = await getCurrentUser();
+  const attrs = await fetchUserAttributes();
+  return {
+    id: userId,
+    email: attrs.email,
+    displayName: attrs.nickname || attrs.email,
+  };
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    api
-      .me()
-      .then((data) => setUser(data.user))
-      .catch(() => localStorage.removeItem('token'))
+    loadCurrentUser()
+      .then(setUser)
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
-  const persist = (data) => {
-    localStorage.setItem('token', data.token);
-    setUser(data.user);
-  };
-
   const login = async (email, password) => {
-    const data = await api.login({ email, password });
-    persist(data);
+    await signIn({ username: email, password });
+    const u = await loadCurrentUser();
+    setUser(u);
   };
 
   const register = async (email, password, displayName) => {
-    const data = await api.register({ email, password, displayName });
-    persist(data);
+    const { isSignUpComplete, nextStep } = await signUp({
+      username: email,
+      password,
+      options: {
+        userAttributes: { email, nickname: displayName },
+        autoSignIn: true,
+      },
+    });
+    if (!isSignUpComplete && nextStep?.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
+      await autoSignIn();
+    } else if (!isSignUpComplete) {
+      throw new Error(
+        'Account created but additional confirmation is required. Check your email.'
+      );
+    }
+    const u = await loadCurrentUser();
+    setUser(u);
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
+  const logout = async () => {
+    await signOut();
     setUser(null);
   };
 

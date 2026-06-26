@@ -9,8 +9,12 @@ server/data/*.sqlite-journal
 server/data/*.sqlite-shm
 server/data/*.sqlite-wal
 server/public/
-.azure/*.env
-.azure/.env
-.azure/**/.env*
-!.azure/deployment-plan.md
 coverage/
+
+# AWS Amplify Gen 2
+.amplify/
+amplify_outputs.json
+amplify_outputs.*.json
+amplifyconfiguration.json
+.aws-sam/
+cdk.out/
