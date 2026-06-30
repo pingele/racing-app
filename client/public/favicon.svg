@@ -1,12 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#0b1020"/>
-  <g fill="#e8ecf5">
-    <rect x="14" y="14" width="8" height="8"/>
-    <rect x="30" y="14" width="8" height="8"/>
-    <rect x="22" y="22" width="8" height="8"/>
-    <rect x="38" y="22" width="8" height="8"/>
-    <rect x="14" y="30" width="8" height="8"/>
-    <rect x="30" y="30" width="8" height="8"/>
-  </g>
-  <rect x="14" y="44" width="36" height="6" rx="3" fill="#4f7cff"/>
+  <rect width="64" height="64" rx="12" fill="#ffc425"/>
+  <!-- Vermeer "V" mark: open chevron with a green inner wedge -->
+  <path d="M12 14 L32 50 L52 14 L44 14 L32 36 L20 14 Z" fill="#231f20"/>
+  <path d="M32 50 L44 27 L52 14 Z" fill="#00703c"/>
 </svg>
