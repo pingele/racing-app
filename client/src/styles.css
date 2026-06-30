@@ -455,6 +455,106 @@ form input:focus {
   font-weight: 700;
 }
 
+/* Dark outline button for light backgrounds (cards/tables) */
+.btn-dark {
+  background: transparent;
+  color: var(--charcoal);
+  border: 2px solid var(--charcoal);
+  padding: 0.45rem 0.9rem;
+}
+.btn-dark:hover:not(:disabled) {
+  background: var(--charcoal);
+  color: #fff;
+}
+
+/* Finish-order prediction list */
+.predict-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.predict-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--vermeer-yellow);
+  border-radius: 2px;
+}
+.predict-draggable {
+  transition: border-color 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+}
+.predict-draggable.dragging {
+  opacity: 0.4;
+}
+.predict-draggable.drag-over {
+  border-top: 3px solid var(--vermeer-yellow-dark);
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.08);
+}
+.predict-handle {
+  cursor: grab;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  user-select: none;
+  letter-spacing: -2px;
+}
+.predict-handle:active {
+  cursor: grabbing;
+}
+.predict-pos {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--black);
+  background: var(--vermeer-yellow);
+  min-width: 1.9rem;
+  text-align: center;
+  padding: 0.1rem 0.3rem;
+  border-radius: 2px;
+}
+.predict-name {
+  font-weight: 600;
+}
+.predict-home {
+  font-size: 0.82rem;
+}
+.predict-moves {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.3rem;
+}
+.predict-move {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--charcoal);
+  border-radius: 2px;
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.predict-move:hover:not(:disabled) {
+  background: var(--vermeer-yellow);
+  border-color: var(--vermeer-yellow-dark);
+}
+.predict-move:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Admin row actions */
+.admin-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 /* Calendar page */
 .calendar-head {
   display: flex;

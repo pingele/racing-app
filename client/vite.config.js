@@ -9,11 +9,11 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'Racing Predictor',
+        name: 'MyRacePass Predictor',
         short_name: 'RacePredict',
-        description: 'Predict race winners and earn points.',
-        theme_color: '#0b1020',
-        background_color: '#0b1020',
+        description: 'Predict the finishing order of MyRacePass races and earn points.',
+        theme_color: '#000000',
+        background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
         icons: [

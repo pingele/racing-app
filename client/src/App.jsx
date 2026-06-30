@@ -5,15 +5,21 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Races from './pages/Races.jsx';
 import RaceDetail from './pages/RaceDetail.jsx';
-import Calendar from './pages/Calendar.jsx';
-import Knoxville from './pages/Knoxville.jsx';
-import MyPicks from './pages/MyPicks.jsx';
-import Leaderboard from './pages/Leaderboard.jsx';
+import Standings from './pages/Standings.jsx';
+import Admin from './pages/Admin.jsx';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="container">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user, isAdmin, loading } = useAuth();
+  if (loading) return <div className="container">Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isAdmin) return <Navigate to="/races" replace />;
   return children;
 }
 
@@ -47,35 +53,19 @@ export default function App() {
               }
             />
             <Route
-              path="/calendar"
+              path="/standings"
               element={
                 <ProtectedRoute>
-                  <Calendar />
+                  <Standings />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/knoxville"
+              path="/admin"
               element={
-                <ProtectedRoute>
-                  <Knoxville />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/my-picks"
-              element={
-                <ProtectedRoute>
-                  <MyPicks />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/leaderboard"
-              element={
-                <ProtectedRoute>
-                  <Leaderboard />
-                </ProtectedRoute>
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
               }
             />
             <Route path="*" element={<Navigate to="/races" replace />} />
