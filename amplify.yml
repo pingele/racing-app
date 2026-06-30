@@ -14,6 +14,7 @@ frontend:
       commands:
         - npm install --cache .npm --prefer-offline --no-audit --no-fund
         - export NODE_OPTIONS="--max-old-space-size=5632"
+        - export GENERATE_SOURCEMAP=false
         - npm --prefix client install --cache .npm --prefer-offline --no-audit --no-fund
     build:
       commands:
