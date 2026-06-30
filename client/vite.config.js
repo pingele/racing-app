@@ -30,8 +30,19 @@ export default defineConfig({
     }),
   ],
   build: {
+    chunckSizweWarningLimit: 1000,
+    sourcemap: false,
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptinos: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+	    return 'vendor';
+	  }
+	},
+      },
+    },
   },
   server: {
     port: 5173,
