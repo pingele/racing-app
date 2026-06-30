@@ -23,8 +23,8 @@ frontend:
     baseDirectory: client/dist
     files:
       - '**/*'
-  cache:
-    paths:
-      - .npm/**/*
-      - node_modules/**/*
-      - client/node_modules/**/*
+#  cache:
+#    paths:
+#      - .npm/**/*
+#      - node_modules/**/*
+#      - client/node_modules/**/*
