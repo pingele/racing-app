@@ -13,7 +13,8 @@ export default function NavBar() {
   return (
     <header className="navbar">
       <Link to="/" className="brand">
-        <span className="brand-text">MyRacePass Predictor</span>
+        <img src="/vermeer-logo.svg" alt="Vermeer" className="brand-logo" />
+        <span className="brand-text">Fantasy Racing</span>
       </Link>
       <nav className="nav-links">
         {user ? (

@@ -1,23 +1,25 @@
 :root {
-  /* Vermeer-inspired palette */
-  --vermeer-yellow: #ffc629;
-  --vermeer-yellow-dark: #e5a800;
-  --vermeer-green: #2e5c32;
+  /* Vermeer.com brand palette — exact values from vermeer.com/dist/style.min.css */
+  --vermeer-yellow: #ffc425;
+  --vermeer-yellow-light: #ffce4b;
+  --vermeer-yellow-dark: #e1a907;
+  --vermeer-green: #00703c;
+  --vermeer-green-dark: #045d30;
   --black: #000000;
-  --charcoal: #2b2b2b;
+  --charcoal: #2b2c2e;
 
-  --bg: #f5f5f5;
+  --bg: #f6f5f2;
   --panel: #ffffff;
   --panel-2: #fafafa;
-  --text: #1a1a1a;
-  --muted: #5c5c5c;
+  --text: #212121;
+  --muted: #5f6062;
   --primary: var(--vermeer-yellow);
   --primary-700: var(--vermeer-yellow-dark);
-  --on-primary: #1a1a1a;
-  --green: #2e7d32;
-  --red: #c0392b;
-  --amber: #e5a800;
-  --border: #d9d9d9;
+  --on-primary: #212121;
+  --green: var(--vermeer-green);
+  --red: #d30000;
+  --amber: #e1a907;
+  --border: #c4c6c8;
 
   --font-display: 'Roboto Condensed', Impact, 'Arial Narrow Bold', sans-serif;
   --font-body: 'Open Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -57,14 +59,15 @@ h1 { font-size: 2rem; }
 h2 { font-size: 1.5rem; }
 h3 { font-size: 1.1rem; }
 
-/* Navbar — black header with yellow accent stripe, Vermeer-style */
+/* Navbar — white header with the Vermeer logo and yellow accent stripe, matching vermeer.com */
 .navbar {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
   padding: 0;
-  background: var(--black);
+  background: var(--panel);
   border-bottom: 4px solid var(--vermeer-yellow);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -75,8 +78,7 @@ h3 { font-size: 1.1rem; }
   align-items: center;
   gap: 0.85rem;
   padding: 0 1.5rem;
-  background: var(--black);
-  color: #ffffff;
+  color: var(--charcoal);
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1rem;
@@ -85,22 +87,21 @@ h3 { font-size: 1.1rem; }
   height: 100%;
 }
 .brand:hover {
-  color: var(--vermeer-yellow);
-  background: var(--black);
+  color: var(--vermeer-green);
 }
 .brand-logo {
   display: block;
-  height: 36px;
+  height: 34px;
   width: auto;
 }
 .brand-text {
   padding-left: 0.85rem;
   border-left: 2px solid var(--vermeer-yellow);
   line-height: 1.1;
-  color: #ffffff;
+  color: var(--charcoal);
 }
 .brand:hover .brand-text {
-  color: var(--vermeer-yellow);
+  color: var(--vermeer-green);
 }
 .nav-links {
   display: flex;
@@ -109,7 +110,7 @@ h3 { font-size: 1.1rem; }
   padding: 0 1.5rem;
 }
 .nav-links a {
-  color: #ffffff;
+  color: var(--charcoal);
   font-family: var(--font-display);
   font-weight: 700;
   text-transform: uppercase;
@@ -119,15 +120,15 @@ h3 { font-size: 1.1rem; }
   border-bottom: 2px solid transparent;
 }
 .nav-links a:hover {
-  color: var(--vermeer-yellow);
+  color: var(--vermeer-green);
   border-bottom-color: var(--vermeer-yellow);
 }
 .nav-links a.active {
-  color: var(--vermeer-yellow);
+  color: var(--vermeer-green);
   border-bottom-color: var(--vermeer-yellow);
 }
 .nav-user {
-  color: #cccccc;
+  color: var(--muted);
   font-size: 0.85rem;
   font-weight: 600;
 }
@@ -174,8 +175,8 @@ h3 { font-size: 1.1rem; }
 }
 .btn-ghost {
   background: transparent;
-  color: #ffffff;
-  border: 2px solid #ffffff;
+  color: var(--charcoal);
+  border: 2px solid var(--charcoal);
   padding: 0.55rem 1.1rem;
 }
 .btn-ghost:hover:not(:disabled) {
@@ -212,7 +213,7 @@ form input {
 form input:focus {
   outline: none;
   border-color: var(--vermeer-yellow);
-  box-shadow: 0 0 0 2px rgba(255, 198, 41, 0.25);
+  box-shadow: 0 0 0 2px rgba(255, 196, 37, 0.3);
 }
 .auth-card {
   max-width: 400px;
@@ -451,7 +452,7 @@ form input:focus {
   border-bottom: 2px solid var(--vermeer-yellow);
 }
 .me-row {
-  background: rgba(255, 198, 41, 0.12);
+  background: rgba(255, 196, 37, 0.14);
   font-weight: 700;
 }
 
