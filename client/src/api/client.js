@@ -65,7 +65,9 @@ export const api = {
           listAll(client.models.RaceResult.listRaceResultByClassId, { classId: cls.id }),
         ]);
         entries.sort(bySort);
-        results.sort((a, b) => a.finishPosition - b.finishPosition);
+        // Finishers in order; DNS/DNF (finishPosition <= 0) sort to the bottom.
+        const finPos = (r) => (r.finishPosition > 0 ? r.finishPosition : Infinity);
+        results.sort((a, b) => finPos(a) - finPos(b));
         const myPrediction =
           predictions.find((p) => p.classId === cls.id && p.userId === userId) ?? null;
         return { ...cls, entries, results, myPrediction };

@@ -58,7 +58,10 @@ export function AuthProvider({ children }) {
         autoSignIn: true,
       },
     });
-    if (!isSignUpComplete && nextStep?.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
+    // With the auto-confirm trigger, signUp returns isSignUpComplete=true while
+    // the next step is still COMPLETE_AUTO_SIGN_IN — so gate on the step, not on
+    // isSignUpComplete, or the user is never actually signed in.
+    if (nextStep?.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
       await autoSignIn();
     } else if (!isSignUpComplete) {
       throw new Error(

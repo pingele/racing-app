@@ -46,6 +46,26 @@ async function fetchHtml(url: string): Promise<string> {
   return res.text();
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// MyRacePass intermittently serves datacenter IPs a partial page (parses to
+// nothing). Re-fetch a few times until the parser yields content.
+async function fetchParsed<T>(
+  url: string,
+  parse: (html: string) => T[],
+  attempts = 4,
+): Promise<T[]> {
+  let parsed: T[] = [];
+  for (let i = 0; i < attempts; i++) {
+    const html = await fetchHtml(url);
+    parsed = parse(html);
+    if (parsed.length) return parsed;
+    if (i < attempts - 1) await sleep(700 * (i + 1));
+  }
+  console.warn(`[scrape] ${url} parsed empty after ${attempts} attempts`);
+  return parsed;
+}
+
 async function listAll(
   modelFn: (args: any) => Promise<any>,
   args: Record<string, unknown> = {},
@@ -79,13 +99,12 @@ async function getClient(): Promise<DataClient> {
 async function importRaceDetails(eventId: string, importedBy: string) {
   const client = await getClient();
   const detailsUrl = `${BASE}/events/${eventId}`;
-  const [detailsHtml, entriesHtml] = await Promise.all([
+  const [detailsHtml, parsedClasses] = await Promise.all([
     fetchHtml(detailsUrl),
-    fetchHtml(`${BASE}/events/${eventId}/entries`),
+    fetchParsed(`${BASE}/events/${eventId}/entries`, parseEntries),
   ]);
 
   const details = parseEventDetails(detailsHtml);
-  const parsedClasses = parseEntries(entriesHtml);
 
   // Upsert the Race by mrpEventId.
   const { data: existingRaces } = await client.models.Race.listRaceByMrpEventId({
@@ -202,8 +221,7 @@ async function ensureScoringRules(client: any): Promise<Map<number, number>> {
 async function importRaceResults(eventId: string) {
   const client = await getClient();
   const resultsUrl = `${BASE}/events/${eventId}/races`;
-  const html = await fetchHtml(resultsUrl);
-  const resultClasses = parseResults(html);
+  const resultClasses = await fetchParsed(resultsUrl, parseResults);
 
   const { data: races } = await client.models.Race.listRaceByMrpEventId({
     mrpEventId: eventId,
@@ -237,8 +255,11 @@ async function importRaceResults(eventId: string) {
       const entry = row.mrpEntryId ? entryByMrpId.get(row.mrpEntryId) : null;
       const match = existingResults.find(
         (r: any) =>
-          (row.mrpEntryId && r.mrpEntryId === row.mrpEntryId) ||
-          r.finishPosition === row.finishPosition,
+          row.mrpEntryId
+            ? r.mrpEntryId === row.mrpEntryId
+            : // No driver id: only match a real finishing position. Matching on
+              // finishPosition 0 would collapse every DNS/DNF row into one.
+              row.finishPosition > 0 && r.finishPosition === row.finishPosition,
       );
       const fields = {
         raceId,
@@ -325,12 +346,17 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
     (event.identity as any)?.sub ||
     'admin';
 
-  switch (event.info.fieldName) {
+  // Amplify's custom-mutation resolver puts the field name at the top level of
+  // the event; the AppSyncResolverEvent type declares it under `info`. Read both.
+  const fieldName =
+    (event as any).fieldName ?? (event as any).info?.fieldName;
+
+  switch (fieldName) {
     case 'importRaceDetails':
       return importRaceDetails(eventId, importedBy);
     case 'importRaceResults':
       return importRaceResults(eventId);
     default:
-      throw new Error(`Unsupported field: ${event.info.fieldName}`);
+      throw new Error(`Unsupported field: ${fieldName}`);
   }
 };
