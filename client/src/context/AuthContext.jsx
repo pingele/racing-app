@@ -6,17 +6,23 @@ import {
   autoSignIn,
   getCurrentUser,
   fetchUserAttributes,
+  fetchAuthSession,
 } from 'aws-amplify/auth';
+import { api } from '../api/client.js';
 
 const AuthContext = createContext(null);
 
 async function loadCurrentUser() {
   const { userId } = await getCurrentUser();
+  // Force-refresh so a freshly-added group claim (e.g. Admins) is present.
+  const session = await fetchAuthSession({ forceRefresh: true });
   const attrs = await fetchUserAttributes();
+  const groups = session.tokens?.idToken?.payload?.['cognito:groups'] ?? [];
   return {
     id: userId,
     email: attrs.email,
     displayName: attrs.nickname || attrs.email,
+    isAdmin: Array.isArray(groups) && groups.includes('Admins'),
   };
 }
 
@@ -24,17 +30,23 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const hydrate = async () => {
+    const u = await loadCurrentUser();
+    setUser(u);
+    // Keep an app-level profile row in sync (user storage).
+    api.upsertProfile(u).catch(() => {});
+    return u;
+  };
+
   useEffect(() => {
-    loadCurrentUser()
-      .then(setUser)
+    hydrate()
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (email, password) => {
     await signIn({ username: email, password });
-    const u = await loadCurrentUser();
-    setUser(u);
+    return hydrate();
   };
 
   const register = async (email, password, displayName) => {
@@ -50,11 +62,10 @@ export function AuthProvider({ children }) {
       await autoSignIn();
     } else if (!isSignUpComplete) {
       throw new Error(
-        'Account created but additional confirmation is required. Check your email.'
+        'Account created but additional confirmation is required. Check your email.',
       );
     }
-    const u = await loadCurrentUser();
-    setUser(u);
+    return hydrate();
   };
 
   const logout = async () => {
@@ -63,7 +74,9 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, isAdmin: !!user?.isAdmin, login, register, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

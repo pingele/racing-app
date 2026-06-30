@@ -1,84 +1,123 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
-import { syncRaces } from '../functions/sync-races/resource.js';
+import { scrapeRace } from '../functions/scrape-race/resource.js';
 
+/**
+ * Data model for the MyRacePass scraper + finish-order prediction game.
+ *
+ * Admins scrape MyRacePass events (details + entries + results) on demand via
+ * the `importRaceDetails` / `importRaceResults` custom mutations, both backed by
+ * the `scrape-race` Lambda. Signed-in users predict the full finish order of the
+ * entries in each class; importing results scores those predictions F1-style.
+ *
+ * Models are linked by scalar foreign-key fields + secondary indexes (the app
+ * reads exclusively via the generated `listXByY` index queries and `get`), so
+ * no `hasMany`/`belongsTo` relationships are declared.
+ */
 const schema = a.schema({
+  // One MyRacePass event (e.g. a race night at a track).
   Race: a
     .model({
-      externalId: a.string().required(),
+      mrpEventId: a.string().required(), // the ID an admin types in
       name: a.string().required(),
-      series: a.string(),
       track: a.string(),
-      startTime: a.datetime(),
-      status: a.enum(['scheduled', 'active', 'finished']),
-      syncedAt: a.datetime(),
-      drivers: a.hasMany('Driver', 'raceId'),
-      results: a.hasMany('RaceResult', 'raceId'),
-      picks: a.hasMany('Pick', 'raceId'),
+      location: a.string(),
+      eventDate: a.datetime(),
+      status: a.string(), // 'scheduled' | 'completed'
+      sourceUrl: a.string(),
+      predictionsLocked: a.boolean().default(false),
+      detailsScrapedAt: a.datetime(),
+      resultsScrapedAt: a.datetime(),
+      importedBy: a.string(),
     })
-    .secondaryIndexes((index) => [index('externalId').name('byExternalId')])
+    .secondaryIndexes((index) => [index('mrpEventId').name('byMrpEventId')])
     .authorization((allow) => [
       allow.authenticated().to(['read']),
-      allow.resource(syncRaces),
+      allow.group('Admins'),
     ]),
 
-  Driver: a
+  // A division within an event (e.g. "DIRTcar Late Models").
+  RaceClass: a
     .model({
       raceId: a.id().required(),
-      race: a.belongsTo('Race', 'raceId'),
-      externalId: a.string().required(),
-      number: a.string(),
+      mrpClassId: a.string(),
       name: a.string().required(),
-      active: a.boolean().default(true),
-      picks: a.hasMany('Pick', 'driverId'),
-      results: a.hasMany('RaceResult', 'driverId'),
+      series: a.string(),
+      entryCount: a.integer(),
+      sortOrder: a.integer(),
     })
     .secondaryIndexes((index) => [index('raceId').name('byRace')])
     .authorization((allow) => [
       allow.authenticated().to(['read']),
-      allow.resource(syncRaces),
+      allow.group('Admins'),
     ]),
 
+  // A car/driver entered in a class lineup — the unit users order.
+  Entry: a
+    .model({
+      raceId: a.id().required(),
+      classId: a.id().required(),
+      mrpEntryId: a.string(), // MyRacePass driver id (links entries <-> results)
+      carNumber: a.string(),
+      driverName: a.string().required(),
+      hometown: a.string(),
+      sortOrder: a.integer(),
+    })
+    .secondaryIndexes((index) => [
+      index('raceId').name('byRace'),
+      index('classId').name('byClass'),
+    ])
+    .authorization((allow) => [
+      allow.authenticated().to(['read']),
+      allow.group('Admins'),
+    ]),
+
+  // The actual finishing order of a class's A-Feature.
   RaceResult: a
     .model({
       raceId: a.id().required(),
-      race: a.belongsTo('Race', 'raceId'),
-      driverId: a.id().required(),
-      driver: a.belongsTo('Driver', 'driverId'),
+      classId: a.id().required(),
+      entryId: a.id(),
+      mrpEntryId: a.string(),
       finishPosition: a.integer().required(),
+      startPosition: a.integer(),
+      carNumber: a.string(),
+      driverName: a.string(),
+      hometown: a.string(),
       status: a.string(),
-      laps: a.integer(),
-      bestLapTime: a.string(),
-      lastLapTime: a.string(),
-      totalTime: a.string(),
+      lapsCompleted: a.integer(),
     })
-    .secondaryIndexes((index) => [index('raceId').name('byRace')])
+    .secondaryIndexes((index) => [
+      index('raceId').name('byRace'),
+      index('classId').name('byClass'),
+    ])
     .authorization((allow) => [
       allow.authenticated().to(['read']),
-      allow.resource(syncRaces),
+      allow.group('Admins'),
     ]),
 
-  Pick: a
+  // A user's predicted finish order for one class within an event.
+  Prediction: a
     .model({
       raceId: a.id().required(),
-      race: a.belongsTo('Race', 'raceId'),
-      driverId: a.id().required(),
-      driver: a.belongsTo('Driver', 'driverId'),
+      classId: a.id().required(),
+      userId: a.string().required(), // Cognito sub (lets the Lambda match owners)
       displayName: a.string(),
+      orderedEntryIds: a.string().array(), // Entry IDs, predicted 1st -> last
       pointsAwarded: a.integer(),
       scoredAt: a.datetime(),
     })
     .secondaryIndexes((index) => [
       index('raceId').name('byRace'),
+      index('classId').name('byClass'),
     ])
     .authorization((allow) => [
-      // Each user owns their picks (CRUD on own rows).
+      // Each user owns their predictions (CRUD on own rows).
       allow.owner(),
-      // All signed-in users can read picks (powers the leaderboard).
+      // All signed-in users can read predictions (powers the Standings page).
       allow.authenticated().to(['read']),
-      // The scheduled sync function writes pointsAwarded / scoredAt.
-      allow.resource(syncRaces),
     ]),
 
+  // Configurable F1-style points table (1 -> 25, 2 -> 18, ...).
   ScoringRule: a
     .model({
       finishPosition: a.integer().required(),
@@ -86,9 +125,42 @@ const schema = a.schema({
     })
     .authorization((allow) => [
       allow.authenticated().to(['read']),
-      allow.resource(syncRaces),
+      allow.group('Admins'),
     ]),
-});
+
+  // App-level user storage (profile/role) keyed to the Cognito identity.
+  UserProfile: a
+    .model({
+      userId: a.string().required(),
+      displayName: a.string(),
+      email: a.string(),
+      role: a.string(),
+    })
+    .secondaryIndexes((index) => [index('userId').name('byUserId')])
+    .authorization((allow) => [
+      allow.owner(),
+      allow.authenticated().to(['read']),
+    ]),
+
+  // ---- On-demand admin scrape mutations (backed by the scrape-race Lambda) ----
+  importRaceDetails: a
+    .mutation()
+    .arguments({ eventId: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(scrapeRace))
+    .authorization((allow) => [allow.group('Admins')]),
+
+  importRaceResults: a
+    .mutation()
+    .arguments({ eventId: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(scrapeRace))
+    .authorization((allow) => [allow.group('Admins')]),
+}).authorization((allow) => [
+  // Grant the scrape-race Lambda read + write access to the data API so its
+  // handler can upsert scraped rows and score predictions.
+  allow.resource(scrapeRace).to(['query', 'mutate']),
+]);
 
 export type Schema = ClientSchema<typeof schema>;
 

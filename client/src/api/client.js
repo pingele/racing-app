@@ -1,51 +1,11 @@
-// Thin adapter over AWS Amplify Data (AppSync + DynamoDB) that preserves the
-// snake_case response shape the legacy REST API used, so existing pages can
-// keep consuming `api.listRaces()`, `api.getRace(id)`, etc. with no changes.
+// Thin wrapper over AWS Amplify Data (AppSync + DynamoDB) for the MyRacePass
+// scraper + finish-order prediction game.
 import { generateClient } from 'aws-amplify/data';
-import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth';
+import { getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 
 const client = generateClient({ authMode: 'userPool' });
 
-// ---- helpers ----------------------------------------------------------------
-
-function raceToWire(r) {
-  return {
-    id: r.id,
-    external_id: r.externalId,
-    name: r.name,
-    series: r.series ?? null,
-    track: r.track ?? null,
-    start_time: r.startTime ?? null,
-    status: r.status ?? 'scheduled',
-  };
-}
-
-function driverToWire(d) {
-  return {
-    id: d.id,
-    race_id: d.raceId,
-    external_id: d.externalId,
-    number: d.number ?? null,
-    name: d.name,
-    active: d.active ? 1 : 0,
-  };
-}
-
-function resultToWire(r, driverById) {
-  const d = driverById.get(r.driverId);
-  return {
-    driver_id: r.driverId,
-    name: d?.name ?? '',
-    number: d?.number ?? '',
-    finish_position: r.finishPosition,
-    status: r.status ?? null,
-    laps: r.laps ?? null,
-    best_lap_time: r.bestLapTime ?? null,
-    last_lap_time: r.lastLapTime ?? null,
-    total_time: r.totalTime ?? null,
-  };
-}
-
+// Page through an index/list query until exhausted.
 async function listAll(modelFn, args = {}) {
   const out = [];
   let nextToken = null;
@@ -57,201 +17,161 @@ async function listAll(modelFn, args = {}) {
   return out;
 }
 
-// Monday 00:00 local through next Monday 00:00 local — matches legacy
-// `currentWeekRange` in raceController.js.
-function currentWeekRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dow = start.getDay();
-  const daysSinceMonday = (dow + 6) % 7;
-  start.setDate(start.getDate() - daysSinceMonday);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 7);
-  return { start: start.toISOString(), end: end.toISOString() };
+function bySort(a, b) {
+  return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
 }
 
-// ---- api surface ------------------------------------------------------------
-
 export const api = {
-  // Auth — kept as a thin shim for any caller that still imports `api.me`.
-  // The AuthContext now uses Amplify Auth directly.
-  async me() {
-    const { userId } = await getCurrentUser();
-    const attrs = await fetchUserAttributes();
-    return {
-      user: {
-        id: userId,
-        email: attrs.email,
-        displayName: attrs.nickname || attrs.email,
-      },
+  // ---- profile / user storage ----------------------------------------------
+  async upsertProfile(user) {
+    const existing = await listAll(client.models.UserProfile.listUserProfileByUserId, {
+      userId: user.id,
+    });
+    const fields = {
+      userId: user.id,
+      displayName: user.displayName,
+      email: user.email,
+      role: user.isAdmin ? 'admin' : 'user',
     };
+    if (existing[0]) {
+      await client.models.UserProfile.update({ id: existing[0].id, ...fields });
+    } else {
+      await client.models.UserProfile.create(fields);
+    }
   },
 
-  // Races -------------------------------------------------------------------
+  // ---- races ----------------------------------------------------------------
   async listRaces() {
-    const all = await listAll(client.models.Race.list);
-    const { start, end } = currentWeekRange();
-    const races = all
-      .filter((r) => r.startTime && r.startTime >= start && r.startTime < end)
-      .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
-      .map(raceToWire);
-    return { races };
+    const races = await listAll(client.models.Race.list);
+    races.sort((a, b) => (b.eventDate ?? '').localeCompare(a.eventDate ?? ''));
+    return races;
   },
 
   async getRace(id) {
+    const { userId } = await getCurrentUser();
     const { data: race } = await client.models.Race.get({ id });
     if (!race) throw Object.assign(new Error('Race not found'), { status: 404 });
 
-    const drivers = await listAll(client.models.Driver.listDriverByRaceId, {
-      raceId: id,
-    });
-    drivers.sort(
-      (a, b) =>
-        (parseInt(a.number ?? '0', 10) || 0) -
-        (parseInt(b.number ?? '0', 10) || 0),
-    );
-    const driverById = new Map(drivers.map((d) => [d.id, d]));
+    const [classes, predictions] = await Promise.all([
+      listAll(client.models.RaceClass.listRaceClassByRaceId, { raceId: id }),
+      listAll(client.models.Prediction.listPredictionByRaceId, { raceId: id }),
+    ]);
+    classes.sort(bySort);
 
-    let results = [];
-    if (race.status === 'finished') {
-      const rs = await listAll(client.models.RaceResult.listRaceResultByRaceId, {
-        raceId: id,
-      });
-      results = rs
-        .sort((a, b) => a.finishPosition - b.finishPosition)
-        .map((r) => resultToWire(r, driverById));
-    }
-
-    return {
-      race: raceToWire(race),
-      drivers: drivers.map(driverToWire),
-      results,
-    };
-  },
-
-  async getCalendar() {
-    const all = await listAll(client.models.Race.list);
-    const races = all
-      .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
-      .map(raceToWire);
-    return { races };
-  },
-
-  // Race-Monitor live-session features aren't exposed by AppSync; degrade
-  // gracefully so the UI hides the session picker and shows synced results.
-  async listSessions() {
-    return { sessions: [] };
-  },
-  async getSessionResults() {
-    return { results: [] };
-  },
-
-  // No-op: provider sync runs on the schedule defined by the `sync-races`
-  // Lambda. Returns the matching race so callers can keep working.
-  async syncRaceByExternalId(externalId) {
-    const { data } = await client.models.Race.listRaceByExternalId({ externalId });
-    return { race: data?.[0] ? raceToWire(data[0]) : null };
-  },
-
-  // Picks -------------------------------------------------------------------
-  async getMyPick(raceId) {
-    const { userId } = await getCurrentUser();
-    const all = await listAll(client.models.Pick.listPickByRaceId, { raceId });
-    const mine = all.find((p) => p.owner === userId || p.owner?.endsWith(userId));
-    if (!mine) return { pick: null };
-    return {
-      pick: {
-        id: mine.id,
-        race_id: mine.raceId,
-        driver_id: mine.driverId,
-        points_awarded: mine.pointsAwarded ?? null,
-        scored_at: mine.scoredAt ?? null,
-      },
-    };
-  },
-
-  async createPick(raceId, driverId) {
-    const attrs = await fetchUserAttributes();
-    const { data, errors } = await client.models.Pick.create({
-      raceId,
-      driverId,
-      displayName: attrs.nickname || attrs.email,
-    });
-    if (errors?.length) throw new Error(errors[0].message);
-    return {
-      pick: { id: data.id, raceId: data.raceId, driverId: data.driverId },
-    };
-  },
-
-  async listPicks() {
-    const { userId } = await getCurrentUser();
-    const picks = await listAll(client.models.Pick.list);
-    const mine = picks.filter(
-      (p) => p.owner === userId || p.owner?.endsWith(userId),
-    );
-
-    // Resolve race + driver names in parallel (small N — one row per pick).
-    const rows = await Promise.all(
-      mine.map(async (p) => {
-        const [{ data: race }, { data: driver }, results] = await Promise.all([
-          client.models.Race.get({ id: p.raceId }),
-          client.models.Driver.get({ id: p.driverId }),
-          listAll(client.models.RaceResult.listRaceResultByRaceId, {
-            raceId: p.raceId,
-          }),
+    const detailed = await Promise.all(
+      classes.map(async (cls) => {
+        const [entries, results] = await Promise.all([
+          listAll(client.models.Entry.listEntryByClassId, { classId: cls.id }),
+          listAll(client.models.RaceResult.listRaceResultByClassId, { classId: cls.id }),
         ]);
-        const myResult = results.find((r) => r.driverId === p.driverId);
-        return {
-          id: p.id,
-          race_id: p.raceId,
-          driver_id: p.driverId,
-          created_at: p.createdAt,
-          points_awarded: p.pointsAwarded ?? null,
-          scored_at: p.scoredAt ?? null,
-          race_name: race?.name ?? '',
-          race_status: race?.status ?? 'scheduled',
-          start_time: race?.startTime ?? null,
-          driver_name: driver?.name ?? '',
-          driver_number: driver?.number ?? '',
-          finish_position: myResult?.finishPosition ?? null,
-        };
+        entries.sort(bySort);
+        results.sort((a, b) => a.finishPosition - b.finishPosition);
+        const myPrediction =
+          predictions.find((p) => p.classId === cls.id && p.userId === userId) ?? null;
+        return { ...cls, entries, results, myPrediction };
       }),
     );
-    rows.sort((a, b) => (b.start_time ?? '').localeCompare(a.start_time ?? ''));
-    return { picks: rows };
+
+    return { race, classes: detailed };
   },
 
-  // Leaderboard ------------------------------------------------------------
-  // Aggregates picks client-side. With Cognito-backed Pick rows, each pick
-  // carries the user's `owner` (Cognito sub) and a snapshot of `displayName`,
-  // so we don't need admin access to the Cognito user pool to render this.
-  async leaderboard() {
-    const picks = await listAll(client.models.Pick.list);
-    const byOwner = new Map();
-    for (const p of picks) {
-      const key = p.owner;
-      if (!key) continue;
-      const entry = byOwner.get(key) ?? {
-        user_id: key,
-        display_name: p.displayName || 'Racer',
-        total_points: 0,
-        picks_made: 0,
-        picks_scored: 0,
-      };
-      entry.picks_made += 1;
-      if (p.scoredAt) entry.picks_scored += 1;
-      entry.total_points += p.pointsAwarded ?? 0;
-      // Latest displayName wins (in case user updated their nickname).
-      if (p.displayName) entry.display_name = p.displayName;
-      byOwner.set(key, entry);
+  async savePrediction(raceId, classId, orderedEntryIds) {
+    const { userId } = await getCurrentUser();
+    const attrs = await fetchUserAttributes();
+    const displayName = attrs.nickname || attrs.email;
+    const existing = await listAll(client.models.Prediction.listPredictionByClassId, {
+      classId,
+    });
+    const mine = existing.find((p) => p.userId === userId);
+    if (mine) {
+      const { data, errors } = await client.models.Prediction.update({
+        id: mine.id,
+        orderedEntryIds,
+        displayName,
+      });
+      if (errors?.length) throw new Error(errors[0].message);
+      return data;
     }
-    const ranked = [...byOwner.values()]
+    const { data, errors } = await client.models.Prediction.create({
+      raceId,
+      classId,
+      userId,
+      displayName,
+      orderedEntryIds,
+    });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
+  // ---- admin ----------------------------------------------------------------
+  async setLock(raceId, locked) {
+    const { data, errors } = await client.models.Race.update({
+      id: raceId,
+      predictionsLocked: locked,
+    });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
+  async importRaceDetails(eventId) {
+    const { data, errors } = await client.mutations.importRaceDetails({ eventId });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
+  async importRaceResults(eventId) {
+    const { data, errors } = await client.mutations.importRaceResults({ eventId });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
+  // ---- standings ------------------------------------------------------------
+  // Aggregate every prediction into per-event scores + running totals. Each
+  // prediction snapshots the user's displayName, so no admin pool access needed.
+  async standings() {
+    const [predictions, races] = await Promise.all([
+      listAll(client.models.Prediction.list),
+      listAll(client.models.Race.list),
+    ]);
+    const raceName = new Map(races.map((r) => [r.id, r.name]));
+
+    const byUser = new Map();
+    for (const p of predictions) {
+      if (!p.userId) continue;
+      const u = byUser.get(p.userId) ?? {
+        userId: p.userId,
+        displayName: p.displayName || 'Racer',
+        totalPoints: 0,
+        predictionsMade: 0,
+        predictionsScored: 0,
+        byRace: new Map(),
+      };
+      u.predictionsMade += 1;
+      if (p.scoredAt) u.predictionsScored += 1;
+      const pts = p.pointsAwarded ?? 0;
+      u.totalPoints += pts;
+      u.byRace.set(p.raceId, (u.byRace.get(p.raceId) ?? 0) + pts);
+      if (p.displayName) u.displayName = p.displayName;
+      byUser.set(p.userId, u);
+    }
+
+    const standings = [...byUser.values()]
+      .map((u) => ({
+        ...u,
+        events: [...u.byRace.entries()]
+          .map(([raceId, points]) => ({
+            raceId,
+            name: raceName.get(raceId) ?? 'Race',
+            points,
+          }))
+          .sort((a, b) => b.points - a.points),
+      }))
       .sort((a, b) => {
-        if (b.total_points !== a.total_points) return b.total_points - a.total_points;
-        if (b.picks_scored !== a.picks_scored) return b.picks_scored - a.picks_scored;
-        return a.display_name.localeCompare(b.display_name);
+        if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+        return a.displayName.localeCompare(b.displayName);
       })
-      .map((row, i) => ({ rank: i + 1, ...row }));
-    return { leaderboard: ranked };
+      .map((u, i) => ({ rank: i + 1, ...u }));
+
+    return { standings };
   },
 };

@@ -1,32 +1,56 @@
-# Racing Prediction PWA
+# MyRacePass Predictor
 
-A Progressive Web App where users register, log in, browse races, predict a race winner
-from the active drivers, and earn position-based points based on where their pick finishes.
+A web app where users predict the **finishing order of each class** in a dirt-track
+race night and earn F1-style points. Race data is scraped from
+[MyRacePass](https://www.myracepass.com) on demand by an admin.
+
+## What it does
+- **Admin** enters a MyRacePass numeric **event ID** and clicks **Import Race
+  Details** — the app scrapes the event's details, classes, and entries.
+- **Users** open a race and arrange the **full finishing order** of every entry in
+  each class (their #1 is their predicted winner).
+- **Admin** locks predictions, then clicks **Import Results** after the race —
+  the app scrapes the A-Feature results and **scores** each prediction.
+- **Scoring (F1-style):** a configurable points table (1→25, 2→18, 3→15, … 10→1).
+  An entry earns `points(p)` when the user placed it at the exact position `p`
+  it actually finished. Scores are tracked **per event** and as a **running
+  total** on the Standings page.
 
 ## Stack
-- **Frontend:** ReactJS (Vite) — installable PWA, hosted on AWS Amplify Hosting
-- **Auth:** Amazon Cognito (email + password) via Amplify Auth
-- **Data:** AWS AppSync (GraphQL) + Amazon DynamoDB via Amplify Data
-- **Race sync:** Scheduled AWS Lambda (`amplify/functions/sync-races`) — every 15 min
-- **Race data:** Race Monitor API via a provider abstraction (mock implementation
-  included; real API token plugs in via Amplify Function secrets)
+- **Frontend:** React (Vite), hosted on AWS Amplify Hosting. Opens on the Races
+  page; the Admin screen is gated behind the `Admins` Cognito group.
+- **Auth:** Amazon Cognito (email + password) via Amplify Auth. A post-confirmation
+  trigger auto-promotes a configured admin email into the `Admins` group.
+- **Data:** AWS AppSync (GraphQL) + Amazon DynamoDB via Amplify Data.
+- **Scraping + scoring:** an on-demand Lambda (`amplify/functions/scrape-race`)
+  exposed as the admin-only `importRaceDetails` / `importRaceResults` custom
+  mutations. It fetches MyRacePass pages, parses them with `cheerio`, upserts to
+  DynamoDB, and scores predictions on results import.
 
 ## Structure
 ```
 racing-app/
-  amplify/      Amplify Gen 2 backend (auth, data, scheduled sync function)
-  amplify.yml   Amplify Hosting build spec
-  client/       React PWA (Vite)
-  server/       Legacy Express + SQLite (local-dev / reference only — not deployed)
+  amplify/
+    auth/                     Cognito (email login, Admins group, triggers)
+    data/resource.ts          Race / RaceClass / Entry / RaceResult /
+                              Prediction / ScoringRule / UserProfile + mutations
+    functions/scrape-race/    on-demand scraper + scorer Lambda
+      handler.ts              branches on importRaceDetails / importRaceResults
+      myracepass.ts           cheerio parsers (details / entries / results)
+  amplify.yml                 Amplify Hosting build spec
+  client/                     React app (Vite)
 ```
 
-> The `server/` directory is the legacy single-host Express + SQLite backend
-> from the original Azure App Service deploy. It is no longer used in
-> production — Amplify Gen 2 replaces it with Cognito + AppSync + DynamoDB.
-> Keep it for local reference or delete it when you're satisfied with the
-> Amplify backend.
+### MyRacePass scraping
+MyRacePass is server-rendered HTML, scraped from public pages:
+- `/events/{id}` — event name, track, date.
+- `/events/{id}/entries` — classes and their entries (driver, car #, hometown).
+- `/events/{id}/races` — per-class session results; the **A-Feature** is taken as
+  the official finishing order used for scoring.
 
 ## Local development
+
+> Requires **Node 20+** and AWS credentials configured for the Amplify sandbox.
 
 ### 1. Install dependencies
 ```bash
@@ -35,58 +59,31 @@ npm --prefix client install
 ```
 
 ### 2. Start the Amplify cloud sandbox
-Provisions a per-developer Cognito user pool, AppSync API, DynamoDB tables, and
-the scheduled sync Lambda. Writes `amplify_outputs.json` at the repo root, which
-the client imports automatically.
-
+Provisions a per-developer Cognito user pool (with the `Admins` group + triggers),
+AppSync API, DynamoDB tables, and the `scrape-race` Lambda. Writes
+`amplify_outputs.json` at the repo root, which the client imports automatically.
 ```bash
 npx ampx sandbox
 ```
+Leave it running; it watches `amplify/` and redeploys on change.
 
-Leave this running. The sandbox watches `amplify/` and redeploys on change.
-
-### 3. Run the React PWA
-In a second terminal:
-
+### 3. Run the React app
 ```bash
-npm --prefix client run dev    # http://localhost:5173
+npm --prefix client run dev      # http://localhost:5173
 ```
 
-### 4. (Optional) Switch the sync function to Race Monitor
-1. Set the secret once: `npx ampx sandbox secret set RACE_MONITOR_TOKEN`
-2. Uncomment the `secrets` block in `amplify/functions/sync-races/resource.ts`
-3. Set `RACE_PROVIDER=racemonitor` in that function's environment.
-4. Implement the real fetch logic inside `loadRaces()` in `handler.ts`
-   (port from `server/src/services/RaceMonitorProvider.js`).
+### 4. Bootstrap the admin
+Register with the admin email (default `eric.pingel@gmail.com`, configurable via
+the `ADMIN_EMAIL` env on `amplify/auth/post-confirmation/resource.ts`). The
+post-confirmation trigger adds it to the `Admins` group, and the **Admin** nav
+link appears. Everyone else signs up as a regular predictor.
 
 ## Deploying to AWS Amplify Hosting
+1. Push to GitHub.
+2. In the [AWS Amplify console](https://console.aws.amazon.com/amplify/), create an
+   app → "Host web app" → connect the repo + branch. Amplify auto-detects
+   `amplify.yml` (runs `ampx pipeline-deploy`, then builds the client).
 
-1. Push this repo to GitHub.
-2. In the [AWS Amplify console](https://console.aws.amazon.com/amplify/), create
-   a new app → "Host web app" → connect the repo + branch.
-3. Amplify will auto-detect `amplify.yml`. Confirm the build settings.
-4. The pipeline runs `ampx pipeline-deploy` (provisions the backend) then
-   `npm --prefix client run build` (publishes the static frontend).
-
-After the first deploy, Amplify Hosting injects `amplify_outputs.json` into the
-build environment so the client picks up the right Cognito/AppSync wiring.
-
-## Scoring
-Scoring is **position-based** (F1-style defaults: 1st=25, 2nd=18, ...) and stored in
-the `ScoringRule` model. The scheduled sync function seeds the default table on
-first run and re-scores any newly-finished races. Point values can be edited
-directly in the DynamoDB-backed `ScoringRule` table.
-
-## Product rules
-- One winner pick per user, per race (enforced client-side; consider adding a
-  custom AppSync validator for hard uniqueness if abuse becomes a concern).
-- Picks lock client-side once the race status flips to `finished`.
-- Results sync from the race provider on a schedule; picks are then scored
-  automatically by the same Lambda.
-
-## Race Monitor integration
-The Race Monitor API (https://www.race-monitor.com/APIDocs) requires an API
-token and its docs are behind a login. The scheduled Lambda
-(`amplify/functions/sync-races/handler.ts`) currently uses the bundled mock
-provider. To switch to the real API, follow step 4 of "Local development"
-above.
+## Try it
+Sample finished event for `Import Results`: **614370** (Camden Speedway). Sample
+upcoming/open event for entries-only: **614394**.
