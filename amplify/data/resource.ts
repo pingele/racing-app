@@ -25,6 +25,7 @@ const schema = a.schema({
       status: a.string(), // 'scheduled' | 'completed'
       sourceUrl: a.string(),
       predictionsLocked: a.boolean().default(false),
+      hidden: a.boolean().default(false), // hidden from the public Races screen; still shown in Admin
       detailsScrapedAt: a.datetime(),
       resultsScrapedAt: a.datetime(),
       importedBy: a.string(),
