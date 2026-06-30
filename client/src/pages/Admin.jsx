@@ -17,7 +17,8 @@ export default function Admin() {
   const [races, setRaces] = useState([]);
   const [rowBusy, setRowBusy] = useState({}); // raceId -> action label
 
-  const refresh = () => api.listRaces().then(setRaces).catch(() => {});
+  const refresh = () =>
+    api.listRaces({ includeHidden: true }).then(setRaces).catch(() => {});
 
   useEffect(() => {
     refresh();
@@ -77,6 +78,18 @@ export default function Admin() {
     }
   };
 
+  const toggleHidden = async (race) => {
+    setRowBusy((b) => ({ ...b, [race.id]: 'hide' }));
+    try {
+      await api.setHidden(race.id, !race.hidden);
+      await refresh();
+    } catch (err) {
+      setBanner({ type: 'error', text: `Hide failed: ${err.message}` });
+    } finally {
+      setRowBusy((b) => ({ ...b, [race.id]: undefined }));
+    }
+  };
+
   return (
     <section>
       <h1>Admin</h1>
@@ -124,9 +137,10 @@ export default function Admin() {
             {races.map((r) => {
               const busy = rowBusy[r.id];
               return (
-                <tr key={r.id}>
+                <tr key={r.id} className={r.hidden ? 'hidden-row' : undefined}>
                   <td>
                     <Link to={`/races/${r.id}`}>{r.name}</Link>
+                    {r.hidden && <span className="badge badge-hidden">Hidden</span>}
                   </td>
                   <td>{r.track || ''}</td>
                   <td>{formatDate(r.eventDate)}</td>
@@ -135,6 +149,13 @@ export default function Admin() {
                   <td>{r.predictionsLocked ? '🔒 Locked' : 'Open'}</td>
                   <td>
                     <div className="admin-actions">
+                      <button
+                        className="btn btn-ghost btn-dark"
+                        onClick={() => toggleHidden(r)}
+                        disabled={!!busy}
+                      >
+                        {busy === 'hide' ? '…' : r.hidden ? 'Show' : 'Hide'}
+                      </button>
                       <button
                         className="btn btn-ghost btn-dark"
                         onClick={() => toggleLock(r)}

@@ -313,6 +313,19 @@ form input:focus {
   background: var(--vermeer-green);
   color: #ffffff;
 }
+.badge-hidden {
+  background: var(--muted);
+  color: #ffffff;
+  margin-left: 0.5rem;
+}
+
+/* Admin: a race hidden from the public Races screen */
+.hidden-row td {
+  opacity: 0.6;
+}
+.hidden-row td:first-child {
+  opacity: 1;
+}
 
 /* Detail */
 .detail-head {

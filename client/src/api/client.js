@@ -41,10 +41,13 @@ export const api = {
   },
 
   // ---- races ----------------------------------------------------------------
-  async listRaces() {
+  // By default hidden races are filtered out (the public Races screen). Admin
+  // passes { includeHidden: true } so admins still see every race.
+  async listRaces({ includeHidden = false } = {}) {
     const races = await listAll(client.models.Race.list);
-    races.sort((a, b) => (b.eventDate ?? '').localeCompare(a.eventDate ?? ''));
-    return races;
+    const visible = includeHidden ? races : races.filter((r) => !r.hidden);
+    visible.sort((a, b) => (b.eventDate ?? '').localeCompare(a.eventDate ?? ''));
+    return visible;
   },
 
   async getRace(id) {
@@ -110,6 +113,15 @@ export const api = {
     const { data, errors } = await client.models.Race.update({
       id: raceId,
       predictionsLocked: locked,
+    });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
+  async setHidden(raceId, hidden) {
+    const { data, errors } = await client.models.Race.update({
+      id: raceId,
+      hidden,
     });
     if (errors?.length) throw new Error(errors[0].message);
     return data;
