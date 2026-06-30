@@ -13,6 +13,7 @@ frontend:
     preBuild:
       commands:
         - npm install --cache .npm --prefer-offline --no-audit --no-fund
+        - export NODE_OPTIONS="--max-old-space-size=5632"
         - npm --prefix client install --cache .npm --prefer-offline --no-audit --no-fund
     build:
       commands:
