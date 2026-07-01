@@ -21,6 +21,21 @@ function bySort(a, b) {
   return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
 }
 
+// F1-style default points table — mirrors DEFAULT_SCORING_RULES in the
+// scrape-race Lambda. Used as a fallback when no ScoringRule rows exist yet.
+const DEFAULT_SCORING_RULES = {
+  1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1,
+};
+
+// finishPosition -> points, as an object. Falls back to the F1 default table.
+async function fetchScoringRules() {
+  const rules = await listAll(client.models.ScoringRule.list);
+  if (!rules.length) return { ...DEFAULT_SCORING_RULES };
+  const map = {};
+  for (const r of rules) map[Number(r.finishPosition)] = Number(r.points);
+  return map;
+}
+
 export const api = {
   // ---- profile / user storage ----------------------------------------------
   async upsertProfile(user) {
@@ -55,9 +70,10 @@ export const api = {
     const { data: race } = await client.models.Race.get({ id });
     if (!race) throw Object.assign(new Error('Race not found'), { status: 404 });
 
-    const [classes, predictions] = await Promise.all([
+    const [classes, predictions, scoringRules] = await Promise.all([
       listAll(client.models.RaceClass.listRaceClassByRaceId, { raceId: id }),
       listAll(client.models.Prediction.listPredictionByRaceId, { raceId: id }),
+      fetchScoringRules(),
     ]);
     classes.sort(bySort);
 
@@ -77,7 +93,7 @@ export const api = {
       }),
     );
 
-    return { race, classes: detailed };
+    return { race, classes: detailed, scoringRules };
   },
 
   async savePrediction(raceId, classId, orderedEntryIds) {

@@ -26,7 +26,7 @@ function initialOrder(cls) {
   return [...saved, ...missing];
 }
 
-function ClassPanel({ race, cls, onSaved }) {
+function ClassPanel({ race, cls, scoringRules, onSaved }) {
   const entryById = useMemo(
     () => new Map(cls.entries.map((e) => [e.id, e])),
     [cls.entries],
@@ -93,8 +93,27 @@ function ClassPanel({ race, cls, onSaved }) {
     }
   };
 
-  // ---- finished: show actual results + this user's score -------------------
+  // ---- finished: show actual results, my prediction, and which picks scored -
   if (hasResults) {
+    const orderedIds = cls.myPrediction?.orderedEntryIds ?? [];
+    const hasPrediction = orderedIds.length > 0;
+    // Mirror the Lambda's F1-style scoring: the entry the user placed at
+    // position P scores points(P) when it actually finished at position P.
+    const pickAt = (pos) => (pos > 0 ? entryById.get(orderedIds[pos - 1]) : null);
+    let scoredCount = 0;
+    let scorablePositions = 0;
+    const rows = cls.results.map((r) => {
+      const pos = r.finishPosition;
+      const picked = pickAt(pos);
+      const scored = !!picked && !!r.entryId && picked.id === r.entryId;
+      const points = scored ? scoringRules?.[pos] ?? 0 : 0;
+      if (pos > 0 && scoringRules?.[pos] != null) {
+        scorablePositions += 1;
+        if (scored) scoredCount += 1;
+      }
+      return { r, picked, scored, points };
+    });
+
     return (
       <div className="card">
         <div className="results-head">
@@ -108,28 +127,71 @@ function ClassPanel({ race, cls, onSaved }) {
             </span>
           )}
         </div>
+        {hasPrediction && (
+          <p className="compare-legend">
+            Your picks shown next to the finish. Highlighted rows are the ones
+            you nailed — {scoredCount} of {scorablePositions} scoring positions.
+          </p>
+        )}
         <table className="results-table">
           <thead>
             <tr>
               <th>Pos</th>
               <th>#</th>
               <th>Driver</th>
-              <th>Hometown</th>
-              <th>Start</th>
+              {hasPrediction ? (
+                <>
+                  <th>Your pick</th>
+                  <th>Pts</th>
+                </>
+              ) : (
+                <>
+                  <th>Hometown</th>
+                  <th>Start</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
-            {cls.results.map((r) => (
-              <tr key={r.id}>
+            {rows.map(({ r, picked, scored, points }) => (
+              <tr key={r.id} className={scored ? 'scored' : undefined}>
                 <td>{r.finishPosition > 0 ? `P${r.finishPosition}` : r.status || '—'}</td>
                 <td>{r.carNumber || ''}</td>
                 <td>{r.driverName || ''}</td>
-                <td>{r.hometown || ''}</td>
-                <td>{r.startPosition ?? ''}</td>
+                {hasPrediction ? (
+                  <>
+                    <td className="pick-cell">
+                      {r.finishPosition > 0 ? (
+                        picked ? (
+                          <>
+                            {scored && <span className="pick-scored">✓ </span>}
+                            <span className="driver-num">#{picked.carNumber}</span>{' '}
+                            {picked.driverName}
+                          </>
+                        ) : (
+                          <span className="muted">—</span>
+                        )
+                      ) : (
+                        ''
+                      )}
+                    </td>
+                    <td className="pts-cell">{scored ? `+${points}` : ''}</td>
+                  </>
+                ) : (
+                  <>
+                    <td>{r.hometown || ''}</td>
+                    <td>{r.startPosition ?? ''}</td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+        {hasPrediction && (
+          <p className="muted compare-legend">
+            “Your pick” is the driver you predicted to finish in that position.
+          </p>
+        )}
       </div>
     );
   }
@@ -254,7 +316,7 @@ export default function RaceDetail() {
   if (error) return <p className="error">{error}</p>;
   if (!data) return <p>Loading race...</p>;
 
-  const { race, classes } = data;
+  const { race, classes, scoringRules } = data;
 
   return (
     <section>
@@ -283,7 +345,13 @@ export default function RaceDetail() {
         </div>
       ) : (
         classes.map((cls) => (
-          <ClassPanel key={cls.id} race={race} cls={cls} onSaved={load} />
+          <ClassPanel
+            key={cls.id}
+            race={race}
+            cls={cls}
+            scoringRules={scoringRules}
+            onSaved={load}
+          />
         ))
       )}
     </section>
