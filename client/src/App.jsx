@@ -6,6 +6,7 @@ import Register from './pages/Register.jsx';
 import Races from './pages/Races.jsx';
 import RaceDetail from './pages/RaceDetail.jsx';
 import Standings from './pages/Standings.jsx';
+import Scoring from './pages/Scoring.jsx';
 import Admin from './pages/Admin.jsx';
 
 function ProtectedRoute({ children }) {
@@ -57,6 +58,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <Standings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/scoring"
+              element={
+                <ProtectedRoute>
+                  <Scoring />
                 </ProtectedRoute>
               }
             />

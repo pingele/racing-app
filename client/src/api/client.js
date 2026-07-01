@@ -155,6 +155,19 @@ export const api = {
     return data;
   },
 
+  // ---- scoring --------------------------------------------------------------
+  // The active points table (finishPosition -> points), sorted by position.
+  // Falls back to the F1 default table when no ScoringRule rows exist yet.
+  async scoringRules() {
+    const map = await fetchScoringRules();
+    return Object.entries(map)
+      .map(([finishPosition, points]) => ({
+        finishPosition: Number(finishPosition),
+        points: Number(points),
+      }))
+      .sort((a, b) => a.finishPosition - b.finishPosition);
+  },
+
   // ---- standings ------------------------------------------------------------
   // Aggregate every prediction into per-event scores + running totals. Each
   // prediction snapshots the user's displayName, so no admin pool access needed.

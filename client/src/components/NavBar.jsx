@@ -21,6 +21,7 @@ export default function NavBar() {
           <>
             <NavLink to="/races">Races</NavLink>
             <NavLink to="/standings">Standings</NavLink>
+            <NavLink to="/scoring">Scoring</NavLink>
             {isAdmin && <NavLink to="/admin">Admin</NavLink>}
             <span className="nav-user">{user.displayName}</span>
             <button className="btn btn-ghost" onClick={handleLogout}>
