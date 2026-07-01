@@ -242,9 +242,16 @@ async function importRaceResults(eventId: string) {
   }
 
   let resultRowCount = 0;
+  const sameName = (a: string | null | undefined, b: string | null | undefined) =>
+    (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
   for (const rc of resultClasses) {
+    // Prefer the MyRacePass class id; fall back to the class name. The name is
+    // compared case-insensitively — the entries and results pages render the
+    // same class in different letter case (e.g. "360 SPRINTS - WINGED" vs
+    // "360 Sprints - Winged").
     const cls = (classes as any[]).find(
-      (c) => (rc.mrpClassId && c.mrpClassId === rc.mrpClassId) || c.name === rc.className,
+      (c) =>
+        (rc.mrpClassId && c.mrpClassId === rc.mrpClassId) || sameName(c.name, rc.className),
     );
     if (!cls) continue;
     const existingResults = await listAll(
