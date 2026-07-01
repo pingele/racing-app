@@ -180,7 +180,7 @@ export function parseEntries(html: string): ParsedClass[] {
 
 // ---- results ----------------------------------------------------------------
 
-// Returns one entry per class: the A-Feature finishing order. Heats/qualifying
+// Returns one entry per class: the feature finishing order. Heats/qualifying
 // sessions are ignored.
 export function parseResults(html: string): ParsedResultClass[] {
   const $ = cheerio.load(html);
@@ -191,15 +191,18 @@ export function parseResults(html: string): ParsedResultClass[] {
     const $h2 = $header.find('h2').first();
     if (!$h2.length) return;
     const sessionName = $h2.find('small').first().text().trim() || null;
-    // Only the main event (A-Feature) counts toward predictions/scoring.
-    if (!sessionName || !/^A Feature/i.test(sessionName)) return;
+    // Any feature session counts. Labels vary by track/series — "A Feature",
+    // "ESS A Feature" (series-prefixed), or plain "Feature". The first feature
+    // per class (kept below) is the main event, since features are listed
+    // A, B, C in order.
+    if (!sessionName || !/feature/i.test(sessionName)) return;
 
     const table = $header.nextAll('table').first();
     if (!table.length || !table.find('a[href^="/drivers/"]').length) return;
 
     const className = firstTextNode($h2);
     if (!className) return;
-    // Keep only the first A-Feature seen per class.
+    // Keep only the first feature seen per class (the main event).
     if (byClass.has(className)) return;
 
     const mrpClassId = classIdFrom(
