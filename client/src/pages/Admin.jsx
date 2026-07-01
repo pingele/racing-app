@@ -32,12 +32,19 @@ export default function Admin() {
     setBanner(null);
     try {
       const res = await api.importRaceDetails(id);
-      setBanner({
-        type: 'success',
-        text: `Imported "${res?.name ?? id}" — ${res?.classCount ?? 0} classes, ${
-          res?.entryCount ?? 0
-        } entries.`,
-      });
+      const name = res?.name ?? id;
+      const entryCount = res?.entryCount ?? 0;
+      setBanner(
+        entryCount === 0
+          ? {
+              type: 'info',
+              text: `Saved "${name}", but MyRacePass has no entry list published for this event yet. Re-import once entries are posted (usually closer to race day).`,
+            }
+          : {
+              type: 'success',
+              text: `Imported "${name}" — ${res?.classCount ?? 0} classes, ${entryCount} entries.`,
+            },
+      );
       setEventId('');
       await refresh();
     } catch (err) {
@@ -52,12 +59,20 @@ export default function Admin() {
     setBanner(null);
     try {
       const res = await api.importRaceResults(race.mrpEventId);
-      setBanner({
-        type: 'success',
-        text: `Results imported for "${race.name}" — ${res?.resultClasses ?? 0} classes, ${
-          res?.scoredPredictions ?? 0
-        } predictions scored.`,
-      });
+      const resultClasses = res?.resultClasses ?? 0;
+      setBanner(
+        resultClasses === 0
+          ? {
+              type: 'info',
+              text: `No results posted on MyRacePass yet for "${race.name}". Try again after the event has run.`,
+            }
+          : {
+              type: 'success',
+              text: `Results imported for "${race.name}" — ${resultClasses} classes, ${
+                res?.scoredPredictions ?? 0
+              } predictions scored.`,
+            },
+      );
       await refresh();
     } catch (err) {
       setBanner({ type: 'error', text: `Results import failed: ${err.message}` });
