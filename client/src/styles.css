@@ -415,6 +415,31 @@ form input:focus {
   font-family: var(--font-display);
   font-weight: 700;
 }
+/* Rows where the user's pick matched the actual finish (a scoring pick). */
+.results-table tr.scored {
+  background: rgba(0, 112, 60, 0.1);
+}
+.results-table tr.scored td:first-child {
+  box-shadow: inset 3px 0 0 var(--vermeer-green);
+}
+.pick-cell {
+  color: var(--muted);
+}
+.pick-scored {
+  color: var(--vermeer-green);
+  font-weight: 700;
+}
+.pts-cell {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--vermeer-green);
+  white-space: nowrap;
+}
+.compare-legend {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0.2rem 0 0.6rem;
+}
 
 .results-head {
   display: flex;
