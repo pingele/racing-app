@@ -11,6 +11,13 @@ function formatDate(iso) {
     : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// A busy/slow MyRacePass page or a Lambda timeout surfaces as a 5xx / timeout
+// error. These are transient — re-running the import usually succeeds.
+function isTransientError(err) {
+  const m = (err?.message || '').toLowerCase();
+  return /\b5\d\d\b/.test(m) || m.includes('timeout') || m.includes('timed out');
+}
+
 export default function Admin() {
   const { user } = useAuth();
   const [eventId, setEventId] = useState('');
@@ -73,26 +80,48 @@ export default function Admin() {
     setImporting(true);
     setBanner(null);
     try {
-      const res = await api.importRaceDetails(id);
-      const name = res?.name ?? id;
+      await api.importRaceDetails(id);
+      setBanner({
+        type: 'success',
+        text: 'Import successful, check race details for entries',
+      });
+      setEventId('');
+      await refresh();
+    } catch (err) {
+      setBanner(
+        isTransientError(err)
+          ? { type: 'error', text: 'Import failed (server busy) - re-run' }
+          : { type: 'error', text: `Import failed: ${err.message}` },
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const importEntries = async (race) => {
+    setRowBusy((b) => ({ ...b, [race.id]: 'entries' }));
+    setBanner(null);
+    try {
+      const res = await api.importRaceEntries(race.mrpEventId);
       const entryCount = res?.entryCount ?? 0;
       setBanner(
         entryCount === 0
           ? {
               type: 'info',
-              text: `Saved "${name}", but MyRacePass has no entry list published for this event yet. Re-import once entries are posted (usually closer to race day).`,
+              text: `No entry list published on MyRacePass yet for "${race.name}". Entries are usually released on race day — try again once they're posted.`,
             }
           : {
               type: 'success',
-              text: `Imported "${name}" — ${res?.classCount ?? 0} classes, ${entryCount} entries.`,
+              text: `Entries imported for "${race.name}" — ${
+                res?.classCount ?? 0
+              } classes, ${entryCount} entries.`,
             },
       );
-      setEventId('');
       await refresh();
     } catch (err) {
-      setBanner({ type: 'error', text: `Import failed: ${err.message}` });
+      setBanner({ type: 'error', text: `Entries import failed: ${err.message}` });
     } finally {
-      setImporting(false);
+      setRowBusy((b) => ({ ...b, [race.id]: undefined }));
     }
   };
 
@@ -223,6 +252,13 @@ export default function Admin() {
                           : r.predictionsLocked
                           ? 'Unlock'
                           : 'Lock'}
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => importEntries(r)}
+                        disabled={!!busy}
+                      >
+                        {busy === 'entries' ? 'Importing…' : 'Import entries'}
                       </button>
                       <button
                         className="btn btn-primary"

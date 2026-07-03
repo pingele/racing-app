@@ -168,6 +168,12 @@ export const api = {
     return data;
   },
 
+  async importRaceEntries(eventId) {
+    const { data, errors } = await client.mutations.importRaceEntries({ eventId });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
   async importRaceResults(eventId) {
     const { data, errors } = await client.mutations.importRaceResults({ eventId });
     if (errors?.length) throw new Error(errors[0].message);

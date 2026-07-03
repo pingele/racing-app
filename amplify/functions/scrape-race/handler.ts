@@ -94,50 +94,19 @@ async function getClient(): Promise<DataClient> {
   return _client;
 }
 
-// ---- importRaceDetails ------------------------------------------------------
+// ---- shared entries upsert --------------------------------------------------
 
-async function importRaceDetails(eventId: string, importedBy: string) {
-  const client = await getClient();
-  const detailsUrl = `${BASE}/events/${eventId}`;
-  const [detailsHtml, parsedClasses] = await Promise.all([
-    fetchHtml(detailsUrl),
-    fetchParsed(`${BASE}/events/${eventId}/entries`, parseEntries),
-  ]);
-
-  const details = parseEventDetails(detailsHtml);
-
-  // Upsert the Race by mrpEventId.
-  const { data: existingRaces } = await client.models.Race.listRaceByMrpEventId({
-    mrpEventId: eventId,
-  });
-  const now = new Date().toISOString();
-  const raceFields = {
-    mrpEventId: eventId,
-    name: details.name ?? `Event ${eventId}`,
-    track: details.track ?? null,
-    location: details.location ?? null,
-    eventDate: details.eventDate ?? null,
-    sourceUrl: detailsUrl,
-    detailsScrapedAt: now,
-    importedBy,
-  };
-  let raceId: string;
-  if (existingRaces?.[0]) {
-    const { data } = await client.models.Race.update({
-      id: existingRaces[0].id,
-      ...raceFields,
-    });
-    raceId = data!.id;
-  } else {
-    const { data } = await client.models.Race.create({
-      ...raceFields,
-      status: 'scheduled',
-      predictionsLocked: false,
-    });
-    raceId = data!.id;
-  }
-
-  // Upsert classes + entries.
+// Create-or-update every parsed class and its entries under a race. Never
+// deletes: classes/entries that drop off a later scrape are left in place so
+// existing predictions (which reference Entry ids) stay valid. Matches classes
+// by mrpClassId/name and entries by mrpEntryId (stable MyRacePass driver id)
+// else driverName+carNumber, and refreshes sortOrder to the current lineup.
+// Shared by importRaceDetails and importRaceEntries.
+async function upsertClassesAndEntries(
+  client: DataClient,
+  raceId: string,
+  parsedClasses: ReturnType<typeof parseEntries>,
+) {
   const existingClasses = await listAll(client.models.RaceClass.listRaceClassByRaceId, {
     raceId,
   });
@@ -197,8 +166,92 @@ async function importRaceDetails(eventId: string, importedBy: string) {
       entryCount++;
     }
   }
+  return { classCount, entryCount };
+}
+
+// ---- importRaceDetails ------------------------------------------------------
+
+async function importRaceDetails(eventId: string, importedBy: string) {
+  const client = await getClient();
+  const detailsUrl = `${BASE}/events/${eventId}`;
+  const [detailsHtml, parsedClasses] = await Promise.all([
+    fetchHtml(detailsUrl),
+    fetchParsed(`${BASE}/events/${eventId}/entries`, parseEntries),
+  ]);
+
+  const details = parseEventDetails(detailsHtml);
+
+  // Upsert the Race by mrpEventId.
+  const { data: existingRaces } = await client.models.Race.listRaceByMrpEventId({
+    mrpEventId: eventId,
+  });
+  const now = new Date().toISOString();
+  const raceFields = {
+    mrpEventId: eventId,
+    name: details.name ?? `Event ${eventId}`,
+    track: details.track ?? null,
+    location: details.location ?? null,
+    eventDate: details.eventDate ?? null,
+    sourceUrl: detailsUrl,
+    detailsScrapedAt: now,
+    importedBy,
+  };
+  let raceId: string;
+  if (existingRaces?.[0]) {
+    const { data } = await client.models.Race.update({
+      id: existingRaces[0].id,
+      ...raceFields,
+    });
+    raceId = data!.id;
+  } else {
+    const { data } = await client.models.Race.create({
+      ...raceFields,
+      status: 'scheduled',
+      predictionsLocked: false,
+    });
+    raceId = data!.id;
+  }
+
+  // Upsert classes + entries.
+  const { classCount, entryCount } = await upsertClassesAndEntries(
+    client,
+    raceId,
+    parsedClasses,
+  );
 
   return { raceId, mrpEventId: eventId, name: raceFields.name, classCount, entryCount };
+}
+
+// ---- importRaceEntries ------------------------------------------------------
+
+// Re-import just the entry lists (all classes) for an already-imported race,
+// keyed off its MyRacePass event id. Fetches only the entries page and leaves
+// the Race's event details (name/track/date) untouched — admins run this
+// repeatedly on race day as class seedings finalize.
+async function importRaceEntries(eventId: string) {
+  const client = await getClient();
+
+  const { data: races } = await client.models.Race.listRaceByMrpEventId({
+    mrpEventId: eventId,
+  });
+  const race = races?.[0];
+  if (!race) {
+    throw new Error(
+      `No imported race for event ${eventId}. Import race details first.`,
+    );
+  }
+
+  const parsedClasses = await fetchParsed(
+    `${BASE}/events/${eventId}/entries`,
+    parseEntries,
+  );
+  const { classCount, entryCount } = await upsertClassesAndEntries(
+    client,
+    race.id,
+    parsedClasses,
+  );
+
+  return { raceId: race.id, mrpEventId: eventId, name: race.name, classCount, entryCount };
 }
 
 // ---- importRaceResults + scoring -------------------------------------------
@@ -361,6 +414,8 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
   switch (fieldName) {
     case 'importRaceDetails':
       return importRaceDetails(eventId, importedBy);
+    case 'importRaceEntries':
+      return importRaceEntries(eventId);
     case 'importRaceResults':
       return importRaceResults(eventId);
     default:
