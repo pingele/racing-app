@@ -1,6 +1,7 @@
 import { defineAuth } from '@aws-amplify/backend';
 import { preSignUp } from './pre-signup/resource.js';
 import { postConfirmation } from './post-confirmation/resource.js';
+import { manageAdmin } from '../functions/manage-admin/resource.js';
 
 /**
  * Cognito user pool — email + password sign-in with a required `nickname`
@@ -24,6 +25,10 @@ export const auth = defineAuth({
   },
   access: (allow) => [
     allow.resource(postConfirmation).to(['addUserToGroup']),
+    // The admin screen promotes/demotes users by editing `Admins` group
+    // membership; this grants that Lambda the group-management APIs plus the
+    // `AMPLIFY_AUTH_USERPOOL_ID` env var it needs to target the pool.
+    allow.resource(manageAdmin).to(['addUserToGroup', 'removeUserFromGroup']),
   ],
   triggers: {
     preSignUp,

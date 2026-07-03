@@ -55,6 +55,25 @@ export const api = {
     }
   },
 
+  // ---- users (admin) --------------------------------------------------------
+  // Every signed-in user has a UserProfile row (created lazily on first login),
+  // so this lists everyone who has logged in. Sorted by display name / email.
+  async listUserProfiles() {
+    const profiles = await listAll(client.models.UserProfile.list);
+    return profiles.sort((a, b) =>
+      (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''),
+    );
+  },
+
+  // Grant or revoke admin access for a user (by their Cognito sub / userId).
+  // Backed by the manage-admin Lambda, which edits the `Admins` group and syncs
+  // the UserProfile.role mirror.
+  async setAdminRole(userId, makeAdmin) {
+    const { data, errors } = await client.mutations.setAdminRole({ userId, makeAdmin });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
   // ---- races ----------------------------------------------------------------
   // By default hidden races are filtered out (the public Races screen). Admin
   // passes { includeHidden: true } so admins still see every race.

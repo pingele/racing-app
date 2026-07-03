@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -11,18 +12,59 @@ function formatDate(iso) {
 }
 
 export default function Admin() {
+  const { user } = useAuth();
   const [eventId, setEventId] = useState('');
   const [importing, setImporting] = useState(false);
   const [banner, setBanner] = useState(null); // { type, text }
   const [races, setRaces] = useState([]);
   const [rowBusy, setRowBusy] = useState({}); // raceId -> action label
 
+  const [users, setUsers] = useState([]);
+  const [userQuery, setUserQuery] = useState('');
+  const [userBusy, setUserBusy] = useState({}); // userId -> boolean
+  const [userBanner, setUserBanner] = useState(null); // { type, text }
+
   const refresh = () =>
     api.listRaces({ includeHidden: true }).then(setRaces).catch(() => {});
 
+  const refreshUsers = () =>
+    api.listUserProfiles().then(setUsers).catch(() => {});
+
   useEffect(() => {
     refresh();
+    refreshUsers();
   }, []);
+
+  // Filter by display name or email. Empty query lists everyone.
+  const matchedUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        (u.displayName || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q),
+    );
+  }, [users, userQuery]);
+
+  const setAdminRole = async (u, makeAdmin) => {
+    setUserBusy((b) => ({ ...b, [u.userId]: true }));
+    setUserBanner(null);
+    try {
+      await api.setAdminRole(u.userId, makeAdmin);
+      const name = u.displayName || u.email || 'User';
+      setUserBanner({
+        type: 'success',
+        text: makeAdmin
+          ? `${name} is now an admin. They'll get admin access the next time their session refreshes.`
+          : `Removed admin access from ${name}.`,
+      });
+      await refreshUsers();
+    } catch (err) {
+      setUserBanner({ type: 'error', text: `Role change failed: ${err.message}` });
+    } finally {
+      setUserBusy((b) => ({ ...b, [u.userId]: undefined }));
+    }
+  };
 
   const importDetails = async (e) => {
     e.preventDefault();
@@ -189,6 +231,85 @@ export default function Admin() {
                       >
                         {busy === 'results' ? 'Importing…' : 'Import results'}
                       </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      <h2>User roles</h2>
+      <p className="muted">
+        Search by name and grant or revoke admin access. Only people who have
+        logged in at least once appear here.
+      </p>
+
+      <div className="card">
+        <label>
+          Search users
+          <input
+            type="text"
+            placeholder="Start typing a name…"
+            value={userQuery}
+            onChange={(e) => setUserQuery(e.target.value)}
+          />
+        </label>
+        {userBanner && <p className={userBanner.type}>{userBanner.text}</p>}
+      </div>
+
+      {matchedUsers.length === 0 ? (
+        <p className="muted">
+          {users.length === 0 ? 'No users yet.' : 'No users match that search.'}
+        </p>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matchedUsers.map((u) => {
+              const isAdmin = u.role === 'admin';
+              const isSelf = u.userId === user?.id;
+              const busy = !!userBusy[u.userId];
+              return (
+                <tr key={u.userId} className={isSelf ? 'me-row' : undefined}>
+                  <td>
+                    {u.displayName || '—'}
+                    {isSelf && (
+                      <span className="badge badge-scheduled" style={{ marginLeft: '0.5rem' }}>
+                        You
+                      </span>
+                    )}
+                  </td>
+                  <td>{u.email || '—'}</td>
+                  <td>{isAdmin ? '🛡️ Admin' : 'User'}</td>
+                  <td>
+                    <div className="admin-actions">
+                      {isAdmin ? (
+                        <button
+                          className="btn btn-ghost btn-dark"
+                          onClick={() => setAdminRole(u, false)}
+                          disabled={busy || isSelf}
+                          title={isSelf ? "You can't remove your own admin access" : undefined}
+                        >
+                          {busy ? '…' : 'Remove admin'}
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => setAdminRole(u, true)}
+                          disabled={busy}
+                        >
+                          {busy ? '…' : 'Make admin'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
