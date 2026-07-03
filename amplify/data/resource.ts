@@ -152,6 +152,15 @@ const schema = a.schema({
     .handler(a.handler.function(scrapeRace))
     .authorization((allow) => [allow.group('Admins')]),
 
+  // Import the event's class list (divisions) from the details page, so classes
+  // exist in the app before any entries are posted. Reuses the race's event ID.
+  importRaceClasses: a
+    .mutation()
+    .arguments({ eventId: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(scrapeRace))
+    .authorization((allow) => [allow.group('Admins')]),
+
   // Re-import just the entry lists (all classes) for an already-imported race.
   // Admins run this repeatedly on race day as class seedings finalize; it leaves
   // the Race's event details untouched.

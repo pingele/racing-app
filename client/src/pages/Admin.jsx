@@ -98,6 +98,34 @@ export default function Admin() {
     }
   };
 
+  const importClasses = async (race) => {
+    setRowBusy((b) => ({ ...b, [race.id]: 'classes' }));
+    setBanner(null);
+    try {
+      const res = await api.importRaceClasses(race.mrpEventId);
+      const classCount = res?.classCount ?? 0;
+      const created = res?.created ?? 0;
+      setBanner(
+        classCount === 0
+          ? {
+              type: 'info',
+              text: `No classes posted on MyRacePass yet for "${race.name}".`,
+            }
+          : {
+              type: 'success',
+              text: `${classCount} classes on MyRacePass for "${race.name}"${
+                created ? ` — ${created} added` : ' — all already imported'
+              }. Import entries once they're posted.`,
+            },
+      );
+      await refresh();
+    } catch (err) {
+      setBanner({ type: 'error', text: `Classes import failed: ${err.message}` });
+    } finally {
+      setRowBusy((b) => ({ ...b, [race.id]: undefined }));
+    }
+  };
+
   const importEntries = async (race) => {
     setRowBusy((b) => ({ ...b, [race.id]: 'entries' }));
     setBanner(null);
@@ -252,6 +280,13 @@ export default function Admin() {
                           : r.predictionsLocked
                           ? 'Unlock'
                           : 'Lock'}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-dark"
+                        onClick={() => importClasses(r)}
+                        disabled={!!busy}
+                      >
+                        {busy === 'classes' ? '…' : 'Import classes'}
                       </button>
                       <button
                         className="btn btn-primary"
