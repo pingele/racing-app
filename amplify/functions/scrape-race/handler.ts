@@ -6,9 +6,15 @@ import { env } from '$amplify/env/scrape-race';
 import type { Schema } from '../../data/resource.js';
 import {
   parseEventDetails,
+  parseEventClasses,
   parseEntries,
   parseResults,
 } from './myracepass.js';
+
+// Class names differ in case between the details page (title case) and the
+// entries page (UPPERCASE), so classes are always matched case-insensitively.
+const sameName = (a?: string | null, b?: string | null) =>
+  (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
 
 /**
  * On-demand scrape Lambda. Backs the `importRaceDetails` and `importRaceResults`
@@ -116,7 +122,7 @@ async function upsertClassesAndEntries(
     const pc = parsedClasses[ci];
     const matchClass = existingClasses.find(
       (c: any) =>
-        (pc.mrpClassId && c.mrpClassId === pc.mrpClassId) || c.name === pc.name,
+        (pc.mrpClassId && c.mrpClassId === pc.mrpClassId) || sameName(c.name, pc.name),
     );
     const classFields = {
       raceId,
@@ -222,6 +228,49 @@ async function importRaceDetails(eventId: string, importedBy: string) {
   return { raceId, mrpEventId: eventId, name: raceFields.name, classCount, entryCount };
 }
 
+// ---- importRaceClasses ------------------------------------------------------
+
+// Import the event's class list (divisions) from the details page's "classes"
+// section, so classes exist in the app before any entries are posted to the
+// /entries page. Creates name-only RaceClass rows (no entries, no mrpClassId);
+// a later importRaceEntries enriches them, matched case-insensitively by name.
+// Existing classes are left untouched so entries-derived data isn't clobbered.
+async function importRaceClasses(eventId: string) {
+  const client = await getClient();
+
+  const { data: races } = await client.models.Race.listRaceByMrpEventId({
+    mrpEventId: eventId,
+  });
+  const race = races?.[0];
+  if (!race) {
+    throw new Error(
+      `No imported race for event ${eventId}. Import race details first.`,
+    );
+  }
+
+  const classNames = await fetchParsed(`${BASE}/events/${eventId}`, parseEventClasses);
+
+  const existingClasses = await listAll(
+    client.models.RaceClass.listRaceClassByRaceId,
+    { raceId: race.id },
+  );
+  let created = 0;
+  for (let ci = 0; ci < classNames.length; ci++) {
+    const name = classNames[ci];
+    if (existingClasses.some((c: any) => sameName(c.name, name))) continue;
+    await client.models.RaceClass.create({ raceId: race.id, name, sortOrder: ci });
+    created++;
+  }
+
+  return {
+    raceId: race.id,
+    mrpEventId: eventId,
+    name: race.name,
+    classCount: classNames.length,
+    created,
+  };
+}
+
 // ---- importRaceEntries ------------------------------------------------------
 
 // Re-import just the entry lists (all classes) for an already-imported race,
@@ -295,8 +344,6 @@ async function importRaceResults(eventId: string) {
   }
 
   let resultRowCount = 0;
-  const sameName = (a: string | null | undefined, b: string | null | undefined) =>
-    (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
   for (const rc of resultClasses) {
     // Prefer the MyRacePass class id; fall back to the class name. The name is
     // compared case-insensitively — the entries and results pages render the
@@ -414,6 +461,8 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
   switch (fieldName) {
     case 'importRaceDetails':
       return importRaceDetails(eventId, importedBy);
+    case 'importRaceClasses':
+      return importRaceClasses(eventId);
     case 'importRaceEntries':
       return importRaceEntries(eventId);
     case 'importRaceResults':

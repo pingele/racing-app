@@ -132,6 +132,35 @@ export function parseEventDetails(html: string): ParsedDetails {
   };
 }
 
+// ---- classes (from the details page) ---------------------------------------
+
+// The event details page lists the night's divisions in a "classes" section
+// (`<header><h4>classes</h4></header><ul class="mrp-iconDetails"><li>…</li></ul>`),
+// present even before any entries are posted to the /entries page. Returns the
+// class names in listed order. Only the section whose heading is exactly
+// "classes" is read — the details page has other `mrp-iconDetails` lists (event
+// times, location). Names here are title-cased and may differ in case from the
+// UPPERCASE names on the entries page, so downstream matching is case-insensitive.
+export function parseEventClasses(html: string): string[] {
+  const $ = cheerio.load(html);
+  const names: string[] = [];
+  $('header.mrp-heading').each((_, headerEl) => {
+    const $header = $(headerEl);
+    if ($header.find('h4').first().text().trim().toLowerCase() !== 'classes') return;
+    $header
+      .nextAll('ul.mrp-iconDetails')
+      .first()
+      .find('li')
+      .each((__, li) => {
+        // Once entries are posted each <li> also holds a "<span>N entries</span>"
+        // count; take only the direct text node (the class name).
+        const name = firstTextNode($(li));
+        if (name) names.push(name);
+      });
+  });
+  return names;
+}
+
 // ---- entries ----------------------------------------------------------------
 
 export function parseEntries(html: string): ParsedClass[] {
