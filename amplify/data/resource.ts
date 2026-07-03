@@ -1,5 +1,6 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { scrapeRace } from '../functions/scrape-race/resource.js';
+import { manageAdmin } from '../functions/manage-admin/resource.js';
 
 /**
  * Data model for the MyRacePass scraper + finish-order prediction game.
@@ -157,10 +158,21 @@ const schema = a.schema({
     .returns(a.json())
     .handler(a.handler.function(scrapeRace))
     .authorization((allow) => [allow.group('Admins')]),
+
+  // Grant/revoke a user's admin access (edits Cognito `Admins` group membership
+  // and syncs the UserProfile.role mirror). `userId` is the target's Cognito sub.
+  setAdminRole: a
+    .mutation()
+    .arguments({ userId: a.string().required(), makeAdmin: a.boolean().required() })
+    .returns(a.json())
+    .handler(a.handler.function(manageAdmin))
+    .authorization((allow) => [allow.group('Admins')]),
 }).authorization((allow) => [
   // Grant the scrape-race Lambda read + write access to the data API so its
   // handler can upsert scraped rows and score predictions.
   allow.resource(scrapeRace).to(['query', 'mutate']),
+  // Grant the manage-admin Lambda access so it can sync UserProfile.role.
+  allow.resource(manageAdmin).to(['query', 'mutate']),
 ]);
 
 export type Schema = ClientSchema<typeof schema>;
