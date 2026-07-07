@@ -490,6 +490,30 @@ async function enterRaceResults(raceId: string, results: ManualResultClass[]) {
   };
 }
 
+// ---- clearPredictions (admin reset) ----------------------------------------
+
+// Delete predictions to reset the game. Scoped to one race when `raceId` is
+// given, otherwise every prediction. Results, classes, entries and users are
+// left untouched — only the users' picks and scores are removed.
+async function clearPredictions(raceId?: string) {
+  const client = await getClient();
+  const predictions = raceId
+    ? await listAll(client.models.Prediction.listPredictionByRaceId, { raceId })
+    : await listAll(client.models.Prediction.list);
+
+  let deleted = 0;
+  for (const p of predictions as any[]) {
+    const { errors } = await client.models.Prediction.delete({ id: p.id });
+    if (errors?.length) {
+      console.error(`[clear] failed to delete prediction ${p.id}`, errors);
+      throw new Error(`Failed to delete prediction ${p.id}: ${errors[0].message}`);
+    }
+    deleted++;
+  }
+  console.log(`[clear] deleted ${deleted} predictions${raceId ? ` for race ${raceId}` : ' (all races)'}`);
+  return { raceId: raceId ?? null, deleted };
+}
+
 // For each class, actual finish position -> the Entry id that finished there.
 async function buildFinishMaps(client: any, raceId: string) {
   const results = await listAll(client.models.RaceResult.listRaceResultByRaceId, { raceId });
@@ -572,6 +596,13 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
     const results =
       typeof args.results === 'string' ? JSON.parse(args.results) : args.results;
     return enterRaceResults(raceId, results as ManualResultClass[]);
+  }
+
+  // Admin reset: clear predictions for one race (raceId) or all races (no arg).
+  if (fieldName === 'clearPredictions') {
+    const args = event.arguments as any;
+    const raceId = args.raceId ? String(args.raceId).trim() : undefined;
+    return clearPredictions(raceId || undefined);
   }
 
   const eventId = String(event.arguments.eventId).trim();
