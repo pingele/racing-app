@@ -186,6 +186,20 @@ export const api = {
     return data;
   },
 
+  // Save admin-entered finishing results and score predictions. `results` is an
+  // array of { classId, rows: [{ entryId, status }] } in finish order (status is
+  // null for a finisher, or 'DNF'/'DNS'/'DQ'). Backed by the scrape-race Lambda,
+  // which owns the write + scoring (predictions are owner-authed, so the browser
+  // can't score other users' rows).
+  async enterRaceResults(raceId, results) {
+    const { data, errors } = await client.mutations.enterRaceResults({
+      raceId,
+      results: JSON.stringify(results),
+    });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
   // ---- scoring --------------------------------------------------------------
   // The active points table (finishPosition -> points), sorted by position.
   // Falls back to the F1 default table when no ScoringRule rows exist yet.

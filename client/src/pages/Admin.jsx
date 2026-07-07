@@ -295,6 +295,14 @@ export default function Admin() {
                       >
                         {busy === 'entries' ? 'Importing…' : 'Import entries'}
                       </button>
+                      {r.predictionsLocked && (
+                        <Link
+                          to={`/admin/races/${r.id}/results`}
+                          className="btn btn-primary"
+                        >
+                          Enter results
+                        </Link>
+                      )}
                       <button
                         className="btn btn-primary"
                         onClick={() => importResults(r)}
