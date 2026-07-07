@@ -178,6 +178,19 @@ const schema = a.schema({
     .handler(a.handler.function(scrapeRace))
     .authorization((allow) => [allow.group('Admins')]),
 
+  // Save admin-entered finishing results for a race and score predictions.
+  // `results` is a JSON array of { classId, rows: [{ entryId, status }] }, where
+  // rows are in the admin's finish order and `status` is null for a finisher or
+  // 'DNF'/'DNS'/'DQ'. The Lambda assigns finish positions, replaces the class's
+  // RaceResult rows, marks the race completed, and runs the same F1-style scorer
+  // as importRaceResults. Re-runnable, so admins can correct results.
+  enterRaceResults: a
+    .mutation()
+    .arguments({ raceId: a.string().required(), results: a.json().required() })
+    .returns(a.json())
+    .handler(a.handler.function(scrapeRace))
+    .authorization((allow) => [allow.group('Admins')]),
+
   // Grant/revoke a user's admin access (edits Cognito `Admins` group membership
   // and syncs the UserProfile.role mirror). `userId` is the target's Cognito sub.
   setAdminRole: a

@@ -401,6 +401,83 @@ async function importRaceResults(eventId: string) {
   return { raceId, mrpEventId: eventId, resultClasses: resultClasses.length, resultRowCount, scoredPredictions };
 }
 
+// ---- enterRaceResults (admin manual entry) ---------------------------------
+
+type ManualResultRow = { entryId: string; status?: string | null };
+type ManualResultClass = { classId: string; rows: ManualResultRow[] };
+
+const DNX_STATUSES = new Set(['DNF', 'DNS', 'DQ']);
+
+// Save admin-entered finishing order for a race, then score predictions.
+// `results` is an array of { classId, rows: [{ entryId, status }] }. Rows are in
+// the admin's finish order; a null/blank status is a finisher (assigned the next
+// sequential finishPosition), while DNF/DNS/DQ get finishPosition 0 + status
+// (matching the scrape convention — those sort last and are non-scorable).
+// Each listed class's RaceResult rows are replaced wholesale so re-entry is
+// idempotent and corrections overwrite cleanly.
+async function enterRaceResults(raceId: string, results: ManualResultClass[]) {
+  const client = await getClient();
+
+  const { data: race } = await client.models.Race.get({ id: raceId });
+  if (!race) throw new Error(`No race found for id ${raceId}.`);
+
+  const allEntries = await listAll(client.models.Entry.listEntryByRaceId, { raceId });
+  const entryById = new Map<string, any>(
+    (allEntries as any[]).map((e) => [e.id, e]),
+  );
+
+  let resultRowCount = 0;
+  for (const rc of results ?? []) {
+    if (!rc?.classId || !Array.isArray(rc.rows)) continue;
+
+    // Replace this class's existing results so a re-entry can't leave stale rows.
+    const existingResults = await listAll(
+      client.models.RaceResult.listRaceResultByClassId,
+      { classId: rc.classId },
+    );
+    for (const r of existingResults as any[]) {
+      await client.models.RaceResult.delete({ id: r.id });
+    }
+
+    let nextPosition = 1;
+    for (const row of rc.rows) {
+      const entry = entryById.get(row.entryId);
+      if (!entry) continue; // skip unknown/removed entries defensively
+      const status =
+        row.status && DNX_STATUSES.has(row.status) ? row.status : null;
+      const finishPosition = status ? 0 : nextPosition++;
+      await client.models.RaceResult.create({
+        raceId,
+        classId: rc.classId,
+        entryId: entry.id,
+        mrpEntryId: entry.mrpEntryId ?? null,
+        finishPosition,
+        startPosition: null,
+        carNumber: entry.carNumber ?? null,
+        driverName: entry.driverName ?? null,
+        hometown: entry.hometown ?? null,
+        status,
+      });
+      resultRowCount++;
+    }
+  }
+
+  await client.models.Race.update({
+    id: raceId,
+    status: 'completed',
+    resultsScrapedAt: new Date().toISOString(),
+  });
+
+  const scoredPredictions = await scorePredictions(client, raceId);
+
+  return {
+    raceId,
+    resultClasses: (results ?? []).length,
+    resultRowCount,
+    scoredPredictions,
+  };
+}
+
 // For each class, actual finish position -> the Entry id that finished there.
 async function buildFinishMaps(client: any, raceId: string) {
   const results = await listAll(client.models.RaceResult.listRaceResultByRaceId, { raceId });
@@ -446,8 +523,6 @@ async function scorePredictions(client: any, raceId: string) {
 // ---- entrypoint -------------------------------------------------------------
 
 export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
-  const eventId = String(event.arguments.eventId).trim();
-  if (!eventId) throw new Error('eventId is required');
   const importedBy =
     (event.identity as any)?.username ||
     (event.identity as any)?.sub ||
@@ -457,6 +532,20 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
   // the event; the AppSyncResolverEvent type declares it under `info`. Read both.
   const fieldName =
     (event as any).fieldName ?? (event as any).info?.fieldName;
+
+  // Admin manual results entry uses a different argument shape (raceId + a JSON
+  // results payload) than the eventId-keyed scrape imports.
+  if (fieldName === 'enterRaceResults') {
+    const args = event.arguments as any;
+    const raceId = String(args.raceId ?? '').trim();
+    if (!raceId) throw new Error('raceId is required');
+    const results =
+      typeof args.results === 'string' ? JSON.parse(args.results) : args.results;
+    return enterRaceResults(raceId, results as ManualResultClass[]);
+  }
+
+  const eventId = String(event.arguments.eventId).trim();
+  if (!eventId) throw new Error('eventId is required');
 
   switch (fieldName) {
     case 'importRaceDetails':

@@ -8,6 +8,7 @@ import RaceDetail from './pages/RaceDetail.jsx';
 import Standings from './pages/Standings.jsx';
 import Scoring from './pages/Scoring.jsx';
 import Admin from './pages/Admin.jsx';
+import EnterResults from './pages/EnterResults.jsx';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -74,6 +75,14 @@ export default function App() {
               element={
                 <AdminRoute>
                   <Admin />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/races/:raceId/results"
+              element={
+                <AdminRoute>
+                  <EnterResults />
                 </AdminRoute>
               }
             />

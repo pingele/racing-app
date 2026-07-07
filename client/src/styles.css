@@ -587,6 +587,29 @@ form input:focus {
   cursor: not-allowed;
 }
 
+/* Admin manual results entry — position + status dropdowns */
+.result-pos-select,
+.result-status-select {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.result-pos-select {
+  font-weight: 700;
+  min-width: 3.4rem;
+  text-align: center;
+}
+.predict-pos-dnx {
+  background: var(--charcoal);
+  color: #fff;
+  font-size: 0.8rem;
+}
+
 /* Admin row actions */
 .admin-actions {
   display: inline-flex;
