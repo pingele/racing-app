@@ -21,6 +21,12 @@ function bySort(a, b) {
   return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
 }
 
+// Custom mutations declared with `.returns(a.json())` come back from AppSync as
+// a JSON string. Parse it so callers get the actual object (counts, ids, etc.).
+function parseJsonResult(data) {
+  return typeof data === 'string' ? JSON.parse(data) : data;
+}
+
 // F1-style default points table — mirrors DEFAULT_SCORING_RULES in the
 // scrape-race Lambda. Used as a fallback when no ScoringRule rows exist yet.
 const DEFAULT_SCORING_RULES = {
@@ -71,7 +77,7 @@ export const api = {
   async setAdminRole(userId, makeAdmin) {
     const { data, errors } = await client.mutations.setAdminRole({ userId, makeAdmin });
     if (errors?.length) throw new Error(errors[0].message);
-    return data;
+    return parseJsonResult(data);
   },
 
   // ---- races ----------------------------------------------------------------
@@ -182,25 +188,25 @@ export const api = {
   async importRaceDetails(eventId) {
     const { data, errors } = await client.mutations.importRaceDetails({ eventId });
     if (errors?.length) throw new Error(errors[0].message);
-    return data;
+    return parseJsonResult(data);
   },
 
   async importRaceClasses(eventId) {
     const { data, errors } = await client.mutations.importRaceClasses({ eventId });
     if (errors?.length) throw new Error(errors[0].message);
-    return data;
+    return parseJsonResult(data);
   },
 
   async importRaceEntries(eventId) {
     const { data, errors } = await client.mutations.importRaceEntries({ eventId });
     if (errors?.length) throw new Error(errors[0].message);
-    return data;
+    return parseJsonResult(data);
   },
 
   async importRaceResults(eventId) {
     const { data, errors } = await client.mutations.importRaceResults({ eventId });
     if (errors?.length) throw new Error(errors[0].message);
-    return data;
+    return parseJsonResult(data);
   },
 
   // Save admin-entered finishing results and score predictions. `results` is an
@@ -214,7 +220,7 @@ export const api = {
       results: JSON.stringify(results),
     });
     if (errors?.length) throw new Error(errors[0].message);
-    return data;
+    return parseJsonResult(data);
   },
 
   // ---- scoring --------------------------------------------------------------
