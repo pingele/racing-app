@@ -426,9 +426,11 @@ async function enterRaceResults(raceId: string, results: ManualResultClass[]) {
     (allEntries as any[]).map((e) => [e.id, e]),
   );
 
+  const scoredClassIds = new Set<string>();
   let resultRowCount = 0;
   for (const rc of results ?? []) {
     if (!rc?.classId || !Array.isArray(rc.rows)) continue;
+    scoredClassIds.add(rc.classId);
 
     // Replace this class's existing results so a re-entry can't leave stale rows.
     const existingResults = await listAll(
@@ -462,19 +464,29 @@ async function enterRaceResults(raceId: string, results: ManualResultClass[]) {
     }
   }
 
+  // Classes are scored one at a time, so only flip the race to "completed" once
+  // every class has results — otherwise leave its current status untouched.
+  const classes = await listAll(client.models.RaceClass.listRaceClassByRaceId, { raceId });
+  const allResults = await listAll(client.models.RaceResult.listRaceResultByRaceId, { raceId });
+  const classesWithResults = new Set((allResults as any[]).map((r) => r.classId));
+  const raceCompleted =
+    classes.length > 0 &&
+    (classes as any[]).every((c) => classesWithResults.has(c.id));
+
   await client.models.Race.update({
     id: raceId,
-    status: 'completed',
+    status: raceCompleted ? 'completed' : race.status ?? 'scheduled',
     resultsScrapedAt: new Date().toISOString(),
   });
 
-  const scoredPredictions = await scorePredictions(client, raceId);
+  const scoredPredictions = await scorePredictions(client, raceId, scoredClassIds);
 
   return {
     raceId,
-    resultClasses: (results ?? []).length,
+    resultClasses: scoredClassIds.size,
     resultRowCount,
     scoredPredictions,
+    raceCompleted,
   };
 }
 
@@ -490,13 +502,25 @@ async function buildFinishMaps(client: any, raceId: string) {
   return byClass;
 }
 
-async function scorePredictions(client: any, raceId: string) {
+// Score predictions for a race. When `classIds` is given, only predictions in
+// those classes are (re)scored — used by per-class manual entry so scoring one
+// class never touches another class's predictions. Omit it to score them all
+// (the results-scraper path).
+async function scorePredictions(client: any, raceId: string, classIds?: Set<string>) {
   const ruleMap = await ensureScoringRules(client);
   const finishMaps = await buildFinishMaps(client, raceId);
   const predictions = await listAll(client.models.Prediction.listPredictionByRaceId, { raceId });
 
+  const inScope = (predictions as any[]).filter(
+    (p) => !classIds || classIds.has(p.classId),
+  );
+  console.log(
+    `[score] race ${raceId}: ${predictions.length} predictions total, ` +
+      `${inScope.length} in scope${classIds ? ` for classes ${[...classIds].join(',')}` : ''}`,
+  );
+
   let scored = 0;
-  for (const p of predictions as any[]) {
+  for (const p of inScope) {
     const actual = finishMaps.get(p.classId);
     const ordered: string[] = (p.orderedEntryIds ?? []).filter(Boolean);
     let points = 0;
@@ -510,11 +534,17 @@ async function scorePredictions(client: any, raceId: string) {
         }
       }
     }
-    await client.models.Prediction.update({
+    // The data client returns GraphQL errors in the result rather than throwing;
+    // surface them so a rejected update can't look like a silent success.
+    const { errors } = await client.models.Prediction.update({
       id: p.id,
       pointsAwarded: points,
       scoredAt: new Date().toISOString(),
     });
+    if (errors?.length) {
+      console.error(`[score] failed to update prediction ${p.id}`, errors);
+      throw new Error(`Failed to score prediction ${p.id}: ${errors[0].message}`);
+    }
     scored++;
   }
   return scored;

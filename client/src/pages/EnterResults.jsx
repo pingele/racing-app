@@ -57,13 +57,15 @@ function moveToFinisherRank(rows, fromIndex, targetRank) {
   return rest;
 }
 
-function ClassResultsEditor({ cls, rows, setRows }) {
+function ClassResultsEditor({ raceId, cls, rows, setRows }) {
   const entryById = useMemo(
     () => new Map(cls.entries.map((e) => [e.id, e])),
     [cls.entries],
   );
   const [dragIndex, setDragIndex] = useState(null);
   const [overIndex, setOverIndex] = useState(null);
+  const [scoring, setScoring] = useState(false);
+  const [msg, setMsg] = useState(null); // { type, text }
 
   // Finisher rank (1-based) per row index, or null for a DNS/DNF/DQ row.
   const ranks = useMemo(() => {
@@ -120,6 +122,33 @@ function ClassResultsEditor({ cls, rows, setRows }) {
       }
       return next;
     });
+  };
+
+  // Save + score just this class. Scoring is scoped server-side to this class,
+  // so it never disturbs other classes' predictions or the race's status until
+  // every class is in.
+  const scoreClass = async () => {
+    setScoring(true);
+    setMsg(null);
+    try {
+      const payload = [
+        {
+          classId: cls.id,
+          rows: rows.map((r) => ({ entryId: r.entryId, status: r.status })),
+        },
+      ];
+      const res = await api.enterRaceResults(raceId, payload);
+      setMsg({
+        type: 'success',
+        text: `Results saved — ${res?.scoredPredictions ?? 0} predictions scored${
+          res?.raceCompleted ? '. All classes scored — race complete.' : '.'
+        }`,
+      });
+    } catch (err) {
+      setMsg({ type: 'error', text: `Scoring failed: ${err.message}` });
+    } finally {
+      setScoring(false);
+    }
   };
 
   if (cls.entries.length === 0) {
@@ -226,6 +255,15 @@ function ClassResultsEditor({ cls, rows, setRows }) {
           );
         })}
       </ol>
+      {msg && <p className={msg.type}>{msg.text}</p>}
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={scoreClass}
+        disabled={scoring}
+      >
+        {scoring ? 'Scoring…' : 'Score race'}
+      </button>
     </div>
   );
 }
@@ -236,9 +274,6 @@ export default function EnterResults() {
   const [data, setData] = useState(null);
   const [rowsByClass, setRowsByClass] = useState({});
   const [error, setError] = useState(null);
-  const [scoring, setScoring] = useState(false);
-  const [banner, setBanner] = useState(null);
-  const [done, setDone] = useState(false);
 
   useEffect(() => {
     api
@@ -258,32 +293,6 @@ export default function EnterResults() {
       [classId]: typeof updater === 'function' ? updater(prev[classId]) : updater,
     }));
 
-  const scoreRace = async () => {
-    setScoring(true);
-    setBanner(null);
-    try {
-      const results = data.classes.map((cls) => ({
-        classId: cls.id,
-        rows: (rowsByClass[cls.id] ?? []).map((r) => ({
-          entryId: r.entryId,
-          status: r.status,
-        })),
-      }));
-      const res = await api.enterRaceResults(raceId, results);
-      setDone(true);
-      setBanner({
-        type: 'success',
-        text: `Results saved — ${res?.resultClasses ?? results.length} classes, ${
-          res?.scoredPredictions ?? 0
-        } predictions scored.`,
-      });
-    } catch (err) {
-      setBanner({ type: 'error', text: `Scoring failed: ${err.message}` });
-    } finally {
-      setScoring(false);
-    }
-  };
-
   if (error) return <p className="error">{error}</p>;
   if (!data) return <p>Loading race…</p>;
 
@@ -293,13 +302,19 @@ export default function EnterResults() {
     <section>
       <div className="detail-head">
         <h1>Enter results — {race.name}</h1>
-        <Link to="/admin" className="btn btn-dark">
-          Back to admin
-        </Link>
+        <div className="admin-actions">
+          <Link to={`/races/${race.id}`} className="btn btn-dark">
+            View race
+          </Link>
+          <Link to="/admin" className="btn btn-dark">
+            Back to admin
+          </Link>
+        </div>
       </div>
       <p className="muted">
-        Set each class's finishing order, then score the race to award points to
-        everyone's predictions. You can re-run this later to correct results.
+        Set each class's finishing order, then score that class to award points to
+        its predictions. Each class scores on its own — you can score them as they
+        finish and re-run any class later to correct results.
       </p>
 
       {classes.length === 0 ? (
@@ -310,41 +325,13 @@ export default function EnterResults() {
         classes.map((cls) => (
           <ClassResultsEditor
             key={cls.id}
+            raceId={race.id}
             cls={cls}
             rows={rowsByClass[cls.id] ?? []}
             setRows={setRowsFor(cls.id)}
           />
         ))
       )}
-
-      {banner && <p className={banner.type}>{banner.text}</p>}
-
-      <div className="admin-actions" style={{ marginTop: '1rem' }}>
-        {done ? (
-          <>
-            <Link to={`/races/${race.id}`} className="btn btn-primary">
-              View scored race
-            </Link>
-            <button
-              type="button"
-              className="btn btn-dark"
-              onClick={scoreRace}
-              disabled={scoring}
-            >
-              {scoring ? 'Scoring…' : 'Re-score'}
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={scoreRace}
-            disabled={scoring || classes.length === 0}
-          >
-            {scoring ? 'Scoring…' : 'Score race'}
-          </button>
-        )}
-      </div>
     </section>
   );
 }

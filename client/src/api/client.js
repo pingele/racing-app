@@ -106,13 +106,19 @@ export const api = {
         // Finishers in order; DNS/DNF (finishPosition <= 0) sort to the bottom.
         const finPos = (r) => (r.finishPosition > 0 ? r.finishPosition : Infinity);
         results.sort((a, b) => finPos(a) - finPos(b));
+        const classPredictions = predictions.filter((p) => p.classId === cls.id);
         const myPrediction =
-          predictions.find((p) => p.classId === cls.id && p.userId === userId) ?? null;
-        return { ...cls, entries, results, myPrediction };
+          classPredictions.find((p) => p.userId === userId) ?? null;
+        // Distinct users who saved a prediction in this class.
+        const predictionCount = new Set(classPredictions.map((p) => p.userId)).size;
+        return { ...cls, entries, results, myPrediction, predictionCount };
       }),
     );
 
-    return { race, classes: detailed, scoringRules };
+    // Distinct users with at least one saved prediction anywhere in this race.
+    const predictionUserCount = new Set(predictions.map((p) => p.userId)).size;
+
+    return { race, classes: detailed, scoringRules, predictionUserCount };
   },
 
   async savePrediction(raceId, classId, orderedEntryIds) {
