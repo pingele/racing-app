@@ -168,6 +168,17 @@ export const api = {
     return data;
   },
 
+  // Lock/unlock predictions for a single class (independent of the race-level
+  // Race.predictionsLocked master switch). Admins have group write on RaceClass.
+  async setClassLock(classId, locked) {
+    const { data, errors } = await client.models.RaceClass.update({
+      id: classId,
+      locked,
+    });
+    if (errors?.length) throw new Error(errors[0].message);
+    return data;
+  },
+
   async importRaceDetails(eventId) {
     const { data, errors } = await client.mutations.importRaceDetails({ eventId });
     if (errors?.length) throw new Error(errors[0].message);

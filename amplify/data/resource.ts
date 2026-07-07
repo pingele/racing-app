@@ -46,6 +46,7 @@ const schema = a.schema({
       series: a.string(),
       entryCount: a.integer(),
       sortOrder: a.integer(),
+      locked: a.boolean().default(false), // per-class prediction lock (independent of Race.predictionsLocked)
     })
     .secondaryIndexes((index) => [index('raceId').name('byRace')])
     .authorization((allow) => [

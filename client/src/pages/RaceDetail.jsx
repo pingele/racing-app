@@ -39,7 +39,9 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
   const [overIndex, setOverIndex] = useState(null);
 
   const hasResults = cls.results.length > 0;
-  const locked = race.predictionsLocked;
+  // A class is closed to prediction edits when the whole race is locked (master
+  // switch) or this specific class has been locked for scoring.
+  const locked = race.predictionsLocked || cls.locked;
 
   // Move the item at `from` to position `to`, shifting the rest.
   const reorder = (from, to) => {
