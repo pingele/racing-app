@@ -204,7 +204,10 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
           {cls.name}
           {cls.series ? <span className="muted"> · {cls.series}</span> : null}
         </h2>
-        <span className="muted">{cls.entries.length} entries</span>
+        <span className="muted">
+          {cls.entries.length} entries · {cls.predictionCount}{' '}
+          {cls.predictionCount === 1 ? 'prediction' : 'predictions'}
+        </span>
       </div>
 
       {cls.entries.length === 0 ? (
@@ -316,7 +319,7 @@ export default function RaceDetail() {
   if (error) return <p className="error">{error}</p>;
   if (!data) return <p>Loading race...</p>;
 
-  const { race, classes, scoringRules } = data;
+  const { race, classes, scoringRules, predictionUserCount } = data;
 
   return (
     <section>
@@ -334,6 +337,10 @@ export default function RaceDetail() {
         {[race.track, race.location].filter(Boolean).join(' · ')}
         {race.track || race.location ? ' · ' : ''}
         {formatDate(race.eventDate)}
+      </p>
+      <p className="muted">
+        {predictionUserCount} {predictionUserCount === 1 ? 'player has' : 'players have'}{' '}
+        entered predictions
       </p>
       {race.predictionsLocked && race.status !== 'completed' && (
         <div className="card info">🔒 Predictions are locked for this event.</div>
