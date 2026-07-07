@@ -66,6 +66,8 @@ function ClassResultsEditor({ raceId, cls, rows, setRows }) {
   const [overIndex, setOverIndex] = useState(null);
   const [scoring, setScoring] = useState(false);
   const [msg, setMsg] = useState(null); // { type, text }
+  const [locked, setLocked] = useState(!!cls.locked);
+  const [lockBusy, setLockBusy] = useState(false);
 
   // Finisher rank (1-based) per row index, or null for a DNS/DNF/DQ row.
   const ranks = useMemo(() => {
@@ -124,6 +126,23 @@ function ClassResultsEditor({ raceId, cls, rows, setRows }) {
     });
   };
 
+  // Lock/unlock predictions for just this class. Locking closes it to players so
+  // its finish order can't change while you enter and score results; other
+  // classes stay open for prediction.
+  const toggleLock = async () => {
+    setLockBusy(true);
+    setMsg(null);
+    try {
+      const next = !locked;
+      await api.setClassLock(cls.id, next);
+      setLocked(next);
+    } catch (err) {
+      setMsg({ type: 'error', text: `Lock failed: ${err.message}` });
+    } finally {
+      setLockBusy(false);
+    }
+  };
+
   // Save + score just this class. Scoring is scoped server-side to this class,
   // so it never disturbs other classes' predictions or the race's status until
   // every class is in.
@@ -168,12 +187,27 @@ function ClassResultsEditor({ raceId, cls, rows, setRows }) {
         <h2>
           {cls.name}
           {cls.series ? <span className="muted"> · {cls.series}</span> : null}
+          {locked && <span className="badge badge-hidden">🔒 Locked</span>}
         </h2>
-        <span className="muted">{cls.entries.length} entries</span>
+        <div className="admin-actions">
+          <span className="muted">
+            {cls.entries.length} entries · {cls.predictionCount ?? 0}{' '}
+            {cls.predictionCount === 1 ? 'prediction' : 'predictions'}
+          </span>
+          <button
+            type="button"
+            className="btn btn-dark"
+            onClick={toggleLock}
+            disabled={lockBusy}
+          >
+            {lockBusy ? '…' : locked ? 'Unlock predictions' : 'Lock predictions'}
+          </button>
+        </div>
       </div>
       <p className="muted">
-        Drag rows, use the ▲/▼ buttons, or pick a place on the left to set the
-        finish. Mark non-finishers with the results dropdown.
+        {locked
+          ? 'Predictions are locked for this class — set the finishing order and score it.'
+          : 'Lock predictions once this class is set, then enter the finish. Drag rows, use the ▲/▼ buttons, or pick a place on the left; mark non-finishers with the results dropdown.'}
       </p>
       <ol className="predict-list">
         {rows.map((row, i) => {
@@ -312,9 +346,9 @@ export default function EnterResults() {
         </div>
       </div>
       <p className="muted">
-        Set each class's finishing order, then score that class to award points to
-        its predictions. Each class scores on its own — you can score them as they
-        finish and re-run any class later to correct results.
+        Each class runs on its own: lock its predictions when it's set, enter the
+        finishing order, then score it to award points — all without touching the
+        other classes. Re-run any class later to correct results.
       </p>
 
       {classes.length === 0 ? (
