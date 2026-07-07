@@ -812,3 +812,113 @@ a.calendar-grid-race:hover,
     justify-content: center;
   }
 }
+
+/* Horizontal-scroll safety wrapper for tables kept tabular on mobile. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- Mobile reflow (phones, <= 640px) ------------------------------------- */
+@media (max-width: 640px) {
+  .container {
+    padding: 1rem 0.85rem;
+  }
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  /* Wide data tables (.table) reflow into stacked, labeled cards so nothing
+     scrolls sideways. Each <td> shows its column name via data-label. */
+  .table thead {
+    display: none;
+  }
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+  .table tr {
+    margin-bottom: 0.9rem;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--vermeer-yellow);
+  }
+  .table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+  }
+  .table td:last-child {
+    border-bottom: none;
+  }
+  .table td::before {
+    content: attr(data-label);
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--charcoal);
+    text-align: left;
+  }
+  /* Full-width cells (e.g. the Standings expand row) span without a label. */
+  .table td[colspan] {
+    display: block;
+    text-align: left;
+  }
+  .table td[colspan]::before {
+    display: none;
+  }
+  /* Action cells: label on its own line, buttons wrap ~2-up below. */
+  .table td.actions-cell {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+    gap: 0.5rem;
+  }
+  .table td.actions-cell .admin-actions {
+    width: 100%;
+  }
+  .table td.actions-cell .admin-actions .btn {
+    flex: 1 1 45%;
+    text-align: center;
+  }
+
+  /* Results tables stay tabular but tighten; the wrapper scrolls if needed. */
+  .results-table {
+    font-size: 0.85rem;
+  }
+  .results-table th,
+  .results-table td {
+    padding: 0.5rem 0.4rem;
+  }
+
+  /* Finish-order prediction rows wrap instead of overflowing. */
+  .predict-row {
+    flex-wrap: wrap;
+    gap: 0.4rem 0.55rem;
+  }
+  .predict-home {
+    display: none; /* hide hometown on phones to save width */
+  }
+  .predict-name {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .predict-moves {
+    margin-left: auto;
+  }
+
+  /* Standalone primary/danger actions in a card go full-width. */
+  .card > .btn-primary,
+  .card > .btn-danger {
+    width: 100%;
+  }
+}

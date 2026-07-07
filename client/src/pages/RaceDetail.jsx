@@ -135,6 +135,7 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
             you nailed — {scoredCount} of {scorablePositions} scoring positions.
           </p>
         )}
+        <div className="table-scroll">
         <table className="results-table">
           <thead>
             <tr>
@@ -189,6 +190,7 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
             ))}
           </tbody>
         </table>
+        </div>
         {hasPrediction && (
           <p className="muted compare-legend">
             “Your pick” is the driver you predicted to finish in that position.

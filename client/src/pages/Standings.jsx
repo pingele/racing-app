@@ -51,11 +51,11 @@ export default function Standings() {
                   }
                   style={{ cursor: 'pointer' }}
                 >
-                  <td>{row.rank}</td>
-                  <td>{row.displayName}</td>
-                  <td>{row.predictionsMade}</td>
-                  <td>{row.predictionsScored}</td>
-                  <td>{row.totalPoints}</td>
+                  <td data-label="Rank">{row.rank}</td>
+                  <td data-label="Racer">{row.displayName}</td>
+                  <td data-label="Predictions">{row.predictionsMade}</td>
+                  <td data-label="Scored">{row.predictionsScored}</td>
+                  <td data-label="Total points">{row.totalPoints}</td>
                 </tr>
                 {expanded === row.userId && (
                   <tr>

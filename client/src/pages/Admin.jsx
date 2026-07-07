@@ -301,16 +301,16 @@ export default function Admin() {
               const busy = rowBusy[r.id];
               return (
                 <tr key={r.id} className={r.hidden ? 'hidden-row' : undefined}>
-                  <td>
+                  <td data-label="Event">
                     <Link to={`/races/${r.id}`}>{r.name}</Link>
                     {r.hidden && <span className="badge badge-hidden">Hidden</span>}
                   </td>
-                  <td>{r.track || ''}</td>
-                  <td>{formatDate(r.eventDate)}</td>
-                  <td>{r.mrpEventId}</td>
-                  <td>{r.status === 'completed' ? 'Results in' : 'Open'}</td>
-                  <td>{r.predictionsLocked ? '🔒 Locked' : 'Open'}</td>
-                  <td>
+                  <td data-label="Track">{r.track || ''}</td>
+                  <td data-label="Date">{formatDate(r.eventDate)}</td>
+                  <td data-label="ID">{r.mrpEventId}</td>
+                  <td data-label="Status">{r.status === 'completed' ? 'Results in' : 'Open'}</td>
+                  <td data-label="Predictions">{r.predictionsLocked ? '🔒 Locked' : 'Open'}</td>
+                  <td data-label="Actions" className="actions-cell">
                     <div className="admin-actions">
                       <button
                         className="btn btn-ghost btn-dark"
@@ -414,7 +414,7 @@ export default function Admin() {
               const busy = !!userBusy[u.userId];
               return (
                 <tr key={u.userId} className={isSelf ? 'me-row' : undefined}>
-                  <td>
+                  <td data-label="Name">
                     {u.displayName || '—'}
                     {isSelf && (
                       <span className="badge badge-scheduled" style={{ marginLeft: '0.5rem' }}>
@@ -422,9 +422,9 @@ export default function Admin() {
                       </span>
                     )}
                   </td>
-                  <td>{u.email || '—'}</td>
-                  <td>{isAdmin ? '🛡️ Admin' : 'User'}</td>
-                  <td>
+                  <td data-label="Email">{u.email || '—'}</td>
+                  <td data-label="Role">{isAdmin ? '🛡️ Admin' : 'User'}</td>
+                  <td data-label="Actions" className="actions-cell">
                     <div className="admin-actions">
                       {isAdmin ? (
                         <button
