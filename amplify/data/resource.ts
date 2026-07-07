@@ -192,6 +192,18 @@ const schema = a.schema({
     .handler(a.handler.function(scrapeRace))
     .authorization((allow) => [allow.group('Admins')]),
 
+  // Delete predictions (and their scores) to reset the game. With `raceId`, only
+  // that race's predictions are cleared; without it, every prediction across all
+  // races is cleared for a fresh season. UserProfiles/logins are left intact.
+  // Runs in the Lambda because predictions are owner-authed and can't be deleted
+  // by an admin's browser session.
+  clearPredictions: a
+    .mutation()
+    .arguments({ raceId: a.string() })
+    .returns(a.json())
+    .handler(a.handler.function(scrapeRace))
+    .authorization((allow) => [allow.group('Admins')]),
+
   // Grant/revoke a user's admin access (edits Cognito `Admins` group membership
   // and syncs the UserProfile.role mirror). `userId` is the target's Cognito sub.
   setAdminRole: a

@@ -31,6 +31,9 @@ export default function Admin() {
   const [userBusy, setUserBusy] = useState({}); // userId -> boolean
   const [userBanner, setUserBanner] = useState(null); // { type, text }
 
+  const [dangerBusy, setDangerBusy] = useState(false);
+  const [dangerBanner, setDangerBanner] = useState(null); // { type, text }
+
   const refresh = () =>
     api.listRaces({ includeHidden: true }).then(setRaces).catch(() => {});
 
@@ -204,6 +207,52 @@ export default function Admin() {
     }
   };
 
+  const clearRacePredictions = async (race) => {
+    if (
+      !window.confirm(
+        `Delete ALL predictions and scores for "${race.name}"? This can't be undone.`,
+      )
+    )
+      return;
+    setRowBusy((b) => ({ ...b, [race.id]: 'clear' }));
+    setBanner(null);
+    try {
+      const res = await api.clearPredictions(race.id);
+      setBanner({
+        type: 'success',
+        text: `Cleared ${res?.deleted ?? 0} predictions for "${race.name}".`,
+      });
+      await refresh();
+    } catch (err) {
+      setBanner({ type: 'error', text: `Clear failed: ${err.message}` });
+    } finally {
+      setRowBusy((b) => ({ ...b, [race.id]: undefined }));
+    }
+  };
+
+  const clearAllPredictions = async () => {
+    if (
+      !window.confirm(
+        'Delete ALL predictions and scores for EVERY race? This resets the whole game and cannot be undone. Users and logins are kept.',
+      )
+    )
+      return;
+    setDangerBusy(true);
+    setDangerBanner(null);
+    try {
+      const res = await api.clearPredictions();
+      setDangerBanner({
+        type: 'success',
+        text: `Cleared ${res?.deleted ?? 0} predictions across all races. Standings are now empty.`,
+      });
+      await refresh();
+    } catch (err) {
+      setDangerBanner({ type: 'error', text: `Clear failed: ${err.message}` });
+    } finally {
+      setDangerBusy(false);
+    }
+  };
+
   return (
     <section>
       <h1>Admin</h1>
@@ -308,6 +357,14 @@ export default function Admin() {
                       >
                         {busy === 'results' ? 'Importing…' : 'Import results'}
                       </button>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => clearRacePredictions(r)}
+                        disabled={!!busy}
+                        title="Delete all predictions and scores for this race"
+                      >
+                        {busy === 'clear' ? 'Clearing…' : 'Clear predictions'}
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -395,6 +452,23 @@ export default function Admin() {
           </tbody>
         </table>
       )}
+
+      <h2>Danger zone</h2>
+      <div className="card danger-card">
+        <p className="muted">
+          Clear every prediction and score across all races — use when starting a
+          fresh season with a new group of players. Races, results, and user
+          logins are kept; standings reset to empty.
+        </p>
+        {dangerBanner && <p className={dangerBanner.type}>{dangerBanner.text}</p>}
+        <button
+          className="btn btn-danger"
+          onClick={clearAllPredictions}
+          disabled={dangerBusy}
+        >
+          {dangerBusy ? 'Clearing…' : 'Clear all predictions & scores'}
+        </button>
+      </div>
     </section>
   );
 }
