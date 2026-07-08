@@ -1,0 +1,21 @@
+{
+  "name": "racing-app-loadtest",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Load-testing harness for the racing app (Cognito + AppSync + DynamoDB).",
+  "scripts": {
+    "users": "node create-users.mjs",
+    "tokens": "node mint-tokens.mjs",
+    "seed": "node seed.mjs",
+    "subs": "node hold-subscriptions.mjs",
+    "fire": "node fire-events.mjs",
+    "teardown": "node teardown.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.637.0",
+    "@aws-sdk/client-dynamodb": "^3.637.0",
+    "@aws-sdk/lib-dynamodb": "^3.637.0",
+    "ws": "^8.18.0"
+  }
+}

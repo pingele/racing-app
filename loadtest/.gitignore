@@ -1,0 +1,6 @@
+node_modules/
+# Generated artifacts (contain test-account tokens/ids — do not commit)
+users.json
+tokens.json
+ltclient.json
+seed-manifest.json
