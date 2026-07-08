@@ -133,6 +133,38 @@ h3 { font-size: 1.1rem; }
   font-weight: 600;
 }
 
+/* Hamburger toggle — hidden on desktop, shown on phones via the media query. */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  margin-right: 1rem;
+  padding: 0 10px;
+  background: transparent;
+  border: 2px solid var(--charcoal);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.nav-toggle-bar {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: var(--charcoal);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.nav-toggle[aria-expanded='true'] .nav-toggle-bar:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.nav-toggle[aria-expanded='true'] .nav-toggle-bar:nth-child(2) {
+  opacity: 0;
+}
+.nav-toggle[aria-expanded='true'] .nav-toggle-bar:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
 .container {
   max-width: 1040px;
   margin: 0 auto;
@@ -827,6 +859,44 @@ a.calendar-grid-race:hover,
   h1 {
     font-size: 1.5rem;
   }
+
+  /* Collapse the inline nav into a hamburger-triggered dropdown panel. */
+  .navbar {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .nav-toggle {
+    display: flex;
+  }
+  .nav-links {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.25rem 0 0.75rem;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .nav-links-open {
+    display: flex;
+  }
+  .nav-links a {
+    padding: 0.85rem 1.5rem;
+    border-bottom: none;
+  }
+  .nav-links a:hover,
+  .nav-links a.active {
+    border-bottom-color: transparent;
+    background: #fffbe6;
+  }
+  .nav-user {
+    padding: 0.6rem 1.5rem 0.2rem;
+  }
+  .nav-links .btn-ghost {
+    margin: 0.5rem 1.5rem 0;
+  }
+
 
   /* Wide data tables (.table) reflow into stacked, labeled cards so nothing
      scrolls sideways. Each <td> shows its column name via data-label. */
