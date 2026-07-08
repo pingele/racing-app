@@ -255,44 +255,68 @@ export const api = {
       listAll(client.models.Race.list),
     ]);
     const raceName = new Map(races.map((r) => [r.id, r.name]));
+    return { standings: aggregateStandings(predictions, raceName) };
+  },
 
-    const byUser = new Map();
-    for (const p of predictions) {
-      if (!p.userId) continue;
-      const u = byUser.get(p.userId) ?? {
-        userId: p.userId,
-        displayName: p.displayName || 'Racer',
-        totalPoints: 0,
-        predictionsMade: 0,
-        predictionsScored: 0,
-        byRace: new Map(),
-      };
-      u.predictionsMade += 1;
-      if (p.scoredAt) u.predictionsScored += 1;
-      const pts = p.pointsAwarded ?? 0;
-      u.totalPoints += pts;
-      u.byRace.set(p.raceId, (u.byRace.get(p.raceId) ?? 0) + pts);
-      if (p.displayName) u.displayName = p.displayName;
-      byUser.set(p.userId, u);
-    }
-
-    const standings = [...byUser.values()]
-      .map((u) => ({
-        ...u,
-        events: [...u.byRace.entries()]
-          .map(([raceId, points]) => ({
-            raceId,
-            name: raceName.get(raceId) ?? 'Race',
-            points,
-          }))
-          .sort((a, b) => b.points - a.points),
-      }))
-      .sort((a, b) => {
-        if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-        return a.displayName.localeCompare(b.displayName);
-      })
-      .map((u, i) => ({ rank: i + 1, ...u }));
-
-    return { standings };
+  // Live standings for the leaderboard rail. Subscribes to the Prediction model
+  // via observeQuery, so the leaderboard reflects scored races the moment the
+  // scorer's mutation lands and (via the `authenticated` read rule's listen
+  // access) as other users' predictions are scored. `onData` receives the full
+  // ranked standings array; per-event breakdowns are omitted (race names aren't
+  // needed for the rail). Returns an unsubscribe function.
+  subscribeStandings(onData, onError) {
+    const sub = client.models.Prediction.observeQuery().subscribe({
+      next: ({ items }) => onData(aggregateStandings(items)),
+      error: (err) => onError?.(err),
+    });
+    return () => sub.unsubscribe();
   },
 };
+
+// Roll predictions up into ranked standings rows. Pass a raceId -> name map to
+// include the per-event points breakdown (used by the full Standings page);
+// omit it for the lightweight leaderboard, which only needs rank/name/points.
+function aggregateStandings(predictions, raceName = null) {
+  const byUser = new Map();
+  for (const p of predictions) {
+    if (!p.userId) continue;
+    const u = byUser.get(p.userId) ?? {
+      userId: p.userId,
+      displayName: p.displayName || 'Racer',
+      totalPoints: 0,
+      predictionsMade: 0,
+      predictionsScored: 0,
+      byRace: new Map(),
+    };
+    u.predictionsMade += 1;
+    if (p.scoredAt) u.predictionsScored += 1;
+    const pts = p.pointsAwarded ?? 0;
+    u.totalPoints += pts;
+    u.byRace.set(p.raceId, (u.byRace.get(p.raceId) ?? 0) + pts);
+    if (p.displayName) u.displayName = p.displayName;
+    byUser.set(p.userId, u);
+  }
+
+  return [...byUser.values()]
+    .map((u) => ({
+      userId: u.userId,
+      displayName: u.displayName,
+      totalPoints: u.totalPoints,
+      predictionsMade: u.predictionsMade,
+      predictionsScored: u.predictionsScored,
+      events: raceName
+        ? [...u.byRace.entries()]
+            .map(([raceId, points]) => ({
+              raceId,
+              name: raceName.get(raceId) ?? 'Race',
+              points,
+            }))
+            .sort((a, b) => b.points - a.points)
+        : [],
+    }))
+    .sort((a, b) => {
+      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+      return a.displayName.localeCompare(b.displayName);
+    })
+    .map((u, i) => ({ rank: i + 1, ...u }));
+}
