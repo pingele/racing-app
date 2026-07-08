@@ -186,7 +186,7 @@ function ClassResultsEditor({ raceId, cls, rows, setRows }) {
       <div className="results-head">
         <h2>
           {cls.name}
-          {cls.series ? <span className="muted"> · {cls.series}</span> : null}
+          {cls.raceType ? <span className="muted"> · {cls.raceType}</span> : null}
           {locked && <span className="badge badge-hidden">🔒 Locked</span>}
         </h2>
         <div className="admin-actions">

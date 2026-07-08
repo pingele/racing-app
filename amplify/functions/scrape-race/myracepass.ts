@@ -49,6 +49,18 @@ export type ParsedResultClass = {
   rows: ParsedResultRow[];
 };
 
+// One predictable session (a division running a specific race type). The races
+// page lists each division's Feature/Heat/Qualifying sessions separately, each
+// with its own lineup; we treat each as its own class so it can be predicted
+// and scored on its own.
+export type ParsedSessionClass = {
+  mrpClassId: string | null; // composite session id, e.g. "787942-2"
+  name: string; // division, e.g. "B Mod (Non-CRUSA)"
+  raceType: string; // session label, e.g. "A Feature 1" / "Heat 2"
+  entryCount: number | null;
+  entries: ParsedEntry[];
+};
+
 // ---- helpers ----------------------------------------------------------------
 
 function firstTextNode($el: cheerio.Cheerio<any>): string {
@@ -62,6 +74,17 @@ function classIdFrom(id: string | undefined): string | null {
   const m = id.match(/class(\d+)-/);
   return m ? m[1] : null;
 }
+
+// The full session id, e.g. "class787942-2" -> "787942-2". Unique per session
+// (division + race type), unlike classIdFrom which drops the session suffix.
+function sessionIdFrom(id: string | undefined | null): string | null {
+  if (!id) return null;
+  const m = id.match(/class(\d+(?:-\d+)?)/);
+  return m ? m[1] : null;
+}
+
+const collapseWs = (s: string | null | undefined) =>
+  (s ?? '').replace(/\s+/g, ' ').trim();
 
 function driverIdFrom(href: string | undefined): string | null {
   if (!href) return null;
@@ -265,4 +288,72 @@ export function parseResults(html: string): ParsedResultClass[] {
   });
 
   return [...byClass.values()];
+}
+
+// ---- sessions (predictable Feature/Heat lineups from the races page) --------
+
+// Features and Heats are predictable; Qualifying (timed) and anything else are
+// skipped.
+function isPredictableSession(label: string): boolean {
+  return /feature|heat/i.test(label) && !/qual/i.test(label);
+}
+
+// Parse the races page (/events/{id}/races) into one class per Feature/Heat
+// session, each with its lineup as entries. Same page the results scraper reads,
+// but here we keep every predictable session (not just the feature) and read its
+// full field. The tbody carries an extra avatar cell the thead lacks, so the
+// driver's cell is found via its /drivers/ link and hometown is the next cell;
+// the car number ("#" column, before the avatar) is read via the header map.
+export function parseSessions(html: string): ParsedSessionClass[] {
+  const $ = cheerio.load(html);
+  const out: ParsedSessionClass[] = [];
+
+  $('header.mrp-heading').each((_, headerEl) => {
+    const $header = $(headerEl);
+    const $h2 = $header.find('h2').first();
+    if (!$h2.length) return;
+
+    const raceType = collapseWs($h2.find('small').first().text());
+    if (!raceType || !isPredictableSession(raceType)) return;
+
+    const name = firstTextNode($h2);
+    if (!name) return;
+
+    const table = $header.nextAll('table').first();
+    if (!table.length || !table.find('a[href^="/drivers/"]').length) return;
+
+    const mrpClassId = sessionIdFrom(
+      $header.attr('id') || table.find('[id^="class"]').first().attr('id'),
+    );
+
+    // Map header labels -> column index; the car-number column sits before the
+    // avatar cell so its index is consistent between thead and tbody.
+    const col: Record<string, number> = {};
+    table.find('thead th').each((i, th) => {
+      const key = collapseWs($(th).text()).toLowerCase();
+      if (key) col[key] = i;
+    });
+    const carCol = col['#'] ?? col['no'] ?? col['car'];
+
+    const entries: ParsedEntry[] = [];
+    table.find('tbody tr').each((__, tr) => {
+      const $tr = $(tr);
+      const a = $tr.find('a[href^="/drivers/"]').last();
+      const driverName = collapseWs(a.text());
+      if (!driverName) return;
+      const tds = $tr.find('> td');
+      const compTd = a.closest('td');
+      entries.push({
+        mrpEntryId: driverIdFrom(a.attr('href')),
+        carNumber: carCol != null ? collapseWs(tds.eq(carCol).text()) || null : null,
+        driverName,
+        hometown: collapseWs(compTd.next('td').text()) || null,
+      });
+    });
+    if (!entries.length) return;
+
+    out.push({ mrpClassId, name, raceType, entryCount: entries.length, entries });
+  });
+
+  return out;
 }

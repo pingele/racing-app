@@ -42,7 +42,8 @@ const schema = a.schema({
     .model({
       raceId: a.id().required(),
       mrpClassId: a.string(),
-      name: a.string().required(),
+      name: a.string().required(), // division, e.g. "B Mod"
+      raceType: a.string(), // session/race type, e.g. "A Feature 1" | "Heat 2"
       series: a.string(),
       entryCount: a.integer(),
       sortOrder: a.integer(),

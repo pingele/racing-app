@@ -101,34 +101,6 @@ export default function Admin() {
     }
   };
 
-  const importClasses = async (race) => {
-    setRowBusy((b) => ({ ...b, [race.id]: 'classes' }));
-    setBanner(null);
-    try {
-      const res = await api.importRaceClasses(race.mrpEventId);
-      const classCount = res?.classCount ?? 0;
-      const created = res?.created ?? 0;
-      setBanner(
-        classCount === 0
-          ? {
-              type: 'info',
-              text: `No classes posted on MyRacePass yet for "${race.name}".`,
-            }
-          : {
-              type: 'success',
-              text: `${classCount} classes on MyRacePass for "${race.name}"${
-                created ? ` — ${created} added` : ' — all already imported'
-              }. Import entries once they're posted.`,
-            },
-      );
-      await refresh();
-    } catch (err) {
-      setBanner({ type: 'error', text: `Classes import failed: ${err.message}` });
-    } finally {
-      setRowBusy((b) => ({ ...b, [race.id]: undefined }));
-    }
-  };
-
   const importEntries = async (race) => {
     setRowBusy((b) => ({ ...b, [race.id]: 'entries' }));
     setBanner(null);
@@ -139,13 +111,13 @@ export default function Admin() {
         entryCount === 0
           ? {
               type: 'info',
-              text: `No entry list published on MyRacePass yet for "${race.name}". Entries are usually released on race day — try again once they're posted.`,
+              text: `No Feature/Heat lineups posted on MyRacePass yet for "${race.name}". Lineups are usually released on race day — try again once they're posted.`,
             }
           : {
               type: 'success',
-              text: `Entries imported for "${race.name}" — ${
+              text: `Lineups imported for "${race.name}" — ${
                 res?.classCount ?? 0
-              } classes, ${entryCount} entries.`,
+              } sessions (Features + Heats), ${entryCount} entries.`,
             },
       );
       await refresh();
@@ -331,16 +303,10 @@ export default function Admin() {
                           : 'Lock all'}
                       </button>
                       <button
-                        className="btn btn-ghost btn-dark"
-                        onClick={() => importClasses(r)}
-                        disabled={!!busy}
-                      >
-                        {busy === 'classes' ? '…' : 'Import classes'}
-                      </button>
-                      <button
                         className="btn btn-primary"
                         onClick={() => importEntries(r)}
                         disabled={!!busy}
+                        title="Import Feature & Heat lineups from MyRacePass"
                       >
                         {busy === 'entries' ? 'Importing…' : 'Import entries'}
                       </button>
