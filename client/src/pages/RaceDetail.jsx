@@ -206,7 +206,7 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
       <div className="results-head">
         <h2>
           {cls.name}
-          {cls.series ? <span className="muted"> · {cls.series}</span> : null}
+          {cls.raceType ? <span className="muted"> · {cls.raceType}</span> : null}
         </h2>
         <span className="muted">
           {cls.entries.length} entries · {cls.predictionCount}{' '}

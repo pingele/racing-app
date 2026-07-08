@@ -6,13 +6,12 @@ import { env } from '$amplify/env/scrape-race';
 import type { Schema } from '../../data/resource.js';
 import {
   parseEventDetails,
-  parseEventClasses,
-  parseEntries,
+  parseSessions,
   parseResults,
 } from './myracepass.js';
 
 // Class names differ in case between the details page (title case) and the
-// entries page (UPPERCASE), so classes are always matched case-insensitively.
+// races page (title case) etc., so classes are always matched case-insensitively.
 const sameName = (a?: string | null, b?: string | null) =>
   (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
 
@@ -100,35 +99,40 @@ async function getClient(): Promise<DataClient> {
   return _client;
 }
 
-// ---- shared entries upsert --------------------------------------------------
+// ---- shared session upsert --------------------------------------------------
 
-// Create-or-update every parsed class and its entries under a race. Never
-// deletes: classes/entries that drop off a later scrape are left in place so
-// existing predictions (which reference Entry ids) stay valid. Matches classes
-// by mrpClassId/name and entries by mrpEntryId (stable MyRacePass driver id)
-// else driverName+carNumber, and refreshes sortOrder to the current lineup.
-// Shared by importRaceDetails and importRaceEntries.
-async function upsertClassesAndEntries(
+// Create-or-update each predictable session as its own class (division + race
+// type) with its lineup as entries. Never deletes: classes/entries that drop off
+// a later scrape are left in place so existing predictions (which reference
+// Entry ids) stay valid. Classes are matched by their composite session
+// mrpClassId (unique per session) — never by name alone, since every session of
+// a division shares the division name. Entries match by mrpEntryId (stable
+// MyRacePass driver id) else driverName+carNumber, refreshing sortOrder to the
+// current lineup. Shared by importRaceDetails and importSessions.
+async function upsertSessionClasses(
   client: DataClient,
   raceId: string,
-  parsedClasses: ReturnType<typeof parseEntries>,
+  parsedSessions: ReturnType<typeof parseSessions>,
 ) {
   const existingClasses = await listAll(client.models.RaceClass.listRaceClassByRaceId, {
     raceId,
   });
   let classCount = 0;
   let entryCount = 0;
-  for (let ci = 0; ci < parsedClasses.length; ci++) {
-    const pc = parsedClasses[ci];
-    const matchClass = existingClasses.find(
-      (c: any) =>
-        (pc.mrpClassId && c.mrpClassId === pc.mrpClassId) || sameName(c.name, pc.name),
-    );
+  let created = 0;
+  for (let ci = 0; ci < parsedSessions.length; ci++) {
+    const pc = parsedSessions[ci];
+    const matchClass = pc.mrpClassId
+      ? existingClasses.find((c: any) => c.mrpClassId === pc.mrpClassId)
+      : existingClasses.find(
+          (c: any) => sameName(c.name, pc.name) && sameName(c.raceType, pc.raceType),
+        );
     const classFields = {
       raceId,
       mrpClassId: pc.mrpClassId ?? null,
       name: pc.name,
-      series: pc.series ?? null,
+      raceType: pc.raceType,
+      series: null,
       entryCount: pc.entryCount ?? pc.entries.length,
       sortOrder: ci,
     };
@@ -142,6 +146,7 @@ async function upsertClassesAndEntries(
     } else {
       const { data } = await client.models.RaceClass.create(classFields);
       classId = data!.id;
+      created++;
     }
     classCount++;
 
@@ -172,7 +177,7 @@ async function upsertClassesAndEntries(
       entryCount++;
     }
   }
-  return { classCount, entryCount };
+  return { classCount, entryCount, created };
 }
 
 // ---- importRaceDetails ------------------------------------------------------
@@ -180,9 +185,9 @@ async function upsertClassesAndEntries(
 async function importRaceDetails(eventId: string, importedBy: string) {
   const client = await getClient();
   const detailsUrl = `${BASE}/events/${eventId}`;
-  const [detailsHtml, parsedClasses] = await Promise.all([
+  const [detailsHtml, parsedSessions] = await Promise.all([
     fetchHtml(detailsUrl),
-    fetchParsed(`${BASE}/events/${eventId}/entries`, parseEntries),
+    fetchParsed(`${BASE}/events/${eventId}/races`, parseSessions),
   ]);
 
   const details = parseEventDetails(detailsHtml);
@@ -218,24 +223,25 @@ async function importRaceDetails(eventId: string, importedBy: string) {
     raceId = data!.id;
   }
 
-  // Upsert classes + entries.
-  const { classCount, entryCount } = await upsertClassesAndEntries(
+  // Upsert per-session classes + their lineups from the races page.
+  const { classCount, entryCount } = await upsertSessionClasses(
     client,
     raceId,
-    parsedClasses,
+    parsedSessions,
   );
 
   return { raceId, mrpEventId: eventId, name: raceFields.name, classCount, entryCount };
 }
 
-// ---- importRaceClasses ------------------------------------------------------
+// ---- importSessions (classes + entries) -------------------------------------
 
-// Import the event's class list (divisions) from the details page's "classes"
-// section, so classes exist in the app before any entries are posted to the
-// /entries page. Creates name-only RaceClass rows (no entries, no mrpClassId);
-// a later importRaceEntries enriches them, matched case-insensitively by name.
-// Existing classes are left untouched so entries-derived data isn't clobbered.
-async function importRaceClasses(eventId: string) {
+// Import every predictable session (Feature/Heat) for an already-imported race
+// from its races page, each as its own class with its lineup as entries. Backs
+// both the "Import classes" and "Import entries" admin actions — on MyRacePass a
+// session and its lineup are posted together, so there's no separate class-only
+// step. Admins run it repeatedly on race day as heat lineups finalize; the
+// Race's event details (name/track/date) are left untouched.
+async function importSessions(eventId: string) {
   const client = await getClient();
 
   const { data: races } = await client.models.Race.listRaceByMrpEventId({
@@ -248,59 +254,17 @@ async function importRaceClasses(eventId: string) {
     );
   }
 
-  const classNames = await fetchParsed(`${BASE}/events/${eventId}`, parseEventClasses);
-
-  const existingClasses = await listAll(
-    client.models.RaceClass.listRaceClassByRaceId,
-    { raceId: race.id },
+  const parsedSessions = await fetchParsed(
+    `${BASE}/events/${eventId}/races`,
+    parseSessions,
   );
-  let created = 0;
-  for (let ci = 0; ci < classNames.length; ci++) {
-    const name = classNames[ci];
-    if (existingClasses.some((c: any) => sameName(c.name, name))) continue;
-    await client.models.RaceClass.create({ raceId: race.id, name, sortOrder: ci });
-    created++;
-  }
-
-  return {
-    raceId: race.id,
-    mrpEventId: eventId,
-    name: race.name,
-    classCount: classNames.length,
-    created,
-  };
-}
-
-// ---- importRaceEntries ------------------------------------------------------
-
-// Re-import just the entry lists (all classes) for an already-imported race,
-// keyed off its MyRacePass event id. Fetches only the entries page and leaves
-// the Race's event details (name/track/date) untouched — admins run this
-// repeatedly on race day as class seedings finalize.
-async function importRaceEntries(eventId: string) {
-  const client = await getClient();
-
-  const { data: races } = await client.models.Race.listRaceByMrpEventId({
-    mrpEventId: eventId,
-  });
-  const race = races?.[0];
-  if (!race) {
-    throw new Error(
-      `No imported race for event ${eventId}. Import race details first.`,
-    );
-  }
-
-  const parsedClasses = await fetchParsed(
-    `${BASE}/events/${eventId}/entries`,
-    parseEntries,
-  );
-  const { classCount, entryCount } = await upsertClassesAndEntries(
+  const { classCount, entryCount, created } = await upsertSessionClasses(
     client,
     race.id,
-    parsedClasses,
+    parsedSessions,
   );
 
-  return { raceId: race.id, mrpEventId: eventId, name: race.name, classCount, entryCount };
+  return { raceId: race.id, mrpEventId: eventId, name: race.name, classCount, entryCount, created };
 }
 
 // ---- importRaceResults + scoring -------------------------------------------
@@ -345,14 +309,17 @@ async function importRaceResults(eventId: string) {
 
   let resultRowCount = 0;
   for (const rc of resultClasses) {
-    // Prefer the MyRacePass class id; fall back to the class name. The name is
-    // compared case-insensitively — the entries and results pages render the
-    // same class in different letter case (e.g. "360 SPRINTS - WINGED" vs
-    // "360 Sprints - Winged").
-    const cls = (classes as any[]).find(
-      (c) =>
-        (rc.mrpClassId && c.mrpClassId === rc.mrpClassId) || sameName(c.name, rc.className),
-    );
+    // Classes are per-session (division + race type). The results scraper keeps
+    // the feature, so match the session class with the same division name AND
+    // race type (e.g. "A Feature 1"); fall back to any feature session for that
+    // division. Names are compared case-insensitively.
+    const cls =
+      (classes as any[]).find(
+        (c) => sameName(c.name, rc.className) && sameName(c.raceType, rc.sessionName),
+      ) ||
+      (classes as any[]).find(
+        (c) => sameName(c.name, rc.className) && /feature/i.test(c.raceType || ''),
+      );
     if (!cls) continue;
     const existingResults = await listAll(
       client.models.RaceResult.listRaceResultByClassId,
@@ -612,9 +579,8 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
     case 'importRaceDetails':
       return importRaceDetails(eventId, importedBy);
     case 'importRaceClasses':
-      return importRaceClasses(eventId);
     case 'importRaceEntries':
-      return importRaceEntries(eventId);
+      return importSessions(eventId);
     case 'importRaceResults':
       return importRaceResults(eventId);
     default:
