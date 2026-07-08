@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import NavBar from './components/NavBar.jsx';
+import Leaderboard from './components/Leaderboard.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Races from './pages/Races.jsx';
@@ -26,70 +27,78 @@ function AdminRoute({ children }) {
 }
 
 export default function App() {
-  const { loading } = useAuth();
+  const { user, loading } = useAuth();
+
+  const content = loading ? (
+    <div>Loading...</div>
+  ) : (
+    <Routes>
+      <Route path="/" element={<Navigate to="/races" replace />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route
+        path="/races"
+        element={
+          <ProtectedRoute>
+            <Races />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/races/:id"
+        element={
+          <ProtectedRoute>
+            <RaceDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/standings"
+        element={
+          <ProtectedRoute>
+            <Standings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/scoring"
+        element={
+          <ProtectedRoute>
+            <Scoring />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <Admin />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/races/:raceId/results"
+        element={
+          <AdminRoute>
+            <EnterResults />
+          </AdminRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/races" replace />} />
+    </Routes>
+  );
+
   return (
     <>
       <NavBar />
-      <main className="container">
-        {loading ? (
-          <div>Loading...</div>
-        ) : (
-          <Routes>
-            <Route path="/" element={<Navigate to="/races" replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route
-              path="/races"
-              element={
-                <ProtectedRoute>
-                  <Races />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/races/:id"
-              element={
-                <ProtectedRoute>
-                  <RaceDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/standings"
-              element={
-                <ProtectedRoute>
-                  <Standings />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/scoring"
-              element={
-                <ProtectedRoute>
-                  <Scoring />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <AdminRoute>
-                  <Admin />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="/admin/races/:raceId/results"
-              element={
-                <AdminRoute>
-                  <EnterResults />
-                </AdminRoute>
-              }
-            />
-            <Route path="*" element={<Navigate to="/races" replace />} />
-          </Routes>
-        )}
-      </main>
+      {user ? (
+        <div className="app-shell">
+          <Leaderboard />
+          <main className="container app-main">{content}</main>
+        </div>
+      ) : (
+        <main className="container">{content}</main>
+      )}
     </>
   );
 }

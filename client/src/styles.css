@@ -171,6 +171,104 @@ h3 { font-size: 1.1rem; }
   padding: 1.75rem 1.5rem;
 }
 
+/* App shell — leaderboard rail on the left, page content on the right. */
+.app-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+.app-shell .app-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+.app-shell .leaderboard {
+  flex: 0 0 240px;
+  position: sticky;
+  top: 84px;
+  margin-top: 1.75rem;
+}
+
+/* Leaderboard — compact top-5 standings. */
+.leaderboard-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.leaderboard-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.leaderboard-all {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vermeer-green);
+  white-space: nowrap;
+}
+.leaderboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.leaderboard-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+.leaderboard-item:last-child {
+  border-bottom: none;
+}
+.leaderboard-item.me {
+  background: rgba(255, 196, 37, 0.16);
+  font-weight: 700;
+}
+.leaderboard-rank {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--black);
+  background: var(--vermeer-yellow);
+  min-width: 1.6rem;
+  text-align: center;
+  padding: 0.05rem 0.3rem;
+  border-radius: 2px;
+  font-size: 0.8rem;
+}
+.leaderboard-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+}
+.leaderboard-pts {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--vermeer-green);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.leaderboard-empty {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -990,5 +1088,41 @@ a.calendar-grid-race:hover,
   .card > .btn-primary,
   .card > .btn-danger {
     width: 100%;
+  }
+
+  /* Leaderboard moves from the left rail to a strip across the top of the
+     screen; the top-5 list scrolls horizontally instead of stacking. */
+  .app-shell {
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+  .app-shell .leaderboard {
+    position: static;
+    flex-basis: auto;
+    width: auto;
+    margin: 0.85rem 0.85rem 0;
+  }
+  .app-shell .app-main {
+    width: 100%;
+  }
+  .leaderboard-list {
+    flex-direction: row;
+    gap: 0.4rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.2rem;
+  }
+  .leaderboard-item {
+    flex: 0 0 auto;
+    gap: 0.4rem;
+    padding: 0.3rem 0.55rem;
+    border-bottom: none;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--vermeer-yellow);
+    border-radius: 2px;
+  }
+  .leaderboard-name {
+    max-width: 8rem;
   }
 }
