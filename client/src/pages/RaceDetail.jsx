@@ -142,17 +142,9 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
               <th>Pos</th>
               <th>#</th>
               <th>Driver</th>
-              {hasPrediction ? (
-                <>
-                  <th>Your pick</th>
-                  <th>Pts</th>
-                </>
-              ) : (
-                <>
-                  <th>Hometown</th>
-                  <th>Start</th>
-                </>
-              )}
+              <th>Start</th>
+              <th>Your pick</th>
+              <th>Pts</th>
             </tr>
           </thead>
           <tbody>
@@ -161,31 +153,23 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
                 <td>{r.finishPosition > 0 ? `P${r.finishPosition}` : r.status || '—'}</td>
                 <td>{r.carNumber || ''}</td>
                 <td>{r.driverName || ''}</td>
-                {hasPrediction ? (
-                  <>
-                    <td className="pick-cell">
-                      {r.finishPosition > 0 ? (
-                        picked ? (
-                          <>
-                            {scored && <span className="pick-scored">✓ </span>}
-                            <span className="driver-num">#{picked.carNumber}</span>{' '}
-                            {picked.driverName}
-                          </>
-                        ) : (
-                          <span className="muted">—</span>
-                        )
-                      ) : (
-                        ''
-                      )}
-                    </td>
-                    <td className="pts-cell">{scored ? `+${points}` : ''}</td>
-                  </>
-                ) : (
-                  <>
-                    <td>{r.hometown || ''}</td>
-                    <td>{r.startPosition ?? ''}</td>
-                  </>
-                )}
+                <td>{r.startPosition ?? '—'}</td>
+                <td className="pick-cell">
+                  {r.finishPosition > 0 ? (
+                    picked ? (
+                      <>
+                        {scored && <span className="pick-scored">✓ </span>}
+                        <span className="driver-num">#{picked.carNumber}</span>{' '}
+                        {picked.driverName}
+                      </>
+                    ) : (
+                      <span className="muted">—</span>
+                    )
+                  ) : (
+                    ''
+                  )}
+                </td>
+                <td className="pts-cell">{scored ? `+${points}` : ''}</td>
               </tr>
             ))}
           </tbody>
