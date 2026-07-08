@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Fantasy Racing — Player Guide</title>
+<!--
+  Source for docs/Fantasy-Racing-Player-Guide.pdf (a one-page player guide).
+  Regenerate the PDF after editing with headless Chrome/Edge:
+    chrome --headless --disable-gpu --no-pdf-header-footer \
+      --print-to-pdf=Fantasy-Racing-Player-Guide.pdf player-guide.html
+  Keep it to a single page (the @page margin + font sizes are tuned for Letter).
+-->
+<style>
+  @page { size: Letter; margin: 0.4in; }
+  :root {
+    --yellow: #ffc425;
+    --yellow-dark: #e1a907;
+    --green: #00703c;
+    --charcoal: #2b2c2e;
+    --muted: #5f6062;
+    --border: #c4c6c8;
+    --panel-2: #fafafa;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: #212121;
+    font-size: 8.7px;
+    line-height: 1.24;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h1, h2, h3 {
+    font-family: "Arial Narrow", "Roboto Condensed", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin: 0;
+  }
+  /* Header */
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid var(--yellow);
+    padding-bottom: 6px;
+    margin-bottom: 9px;
+  }
+  .head h1 { font-size: 21px; color: var(--charcoal); }
+  .head .tag { color: var(--muted); font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; font-size: 8.5px; }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo .mark {
+    width: 26px; height: 26px; background: var(--green); border-radius: 3px;
+    position: relative;
+  }
+  .logo .mark::after {
+    content: "V"; position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center; color: var(--yellow);
+    font-family: "Arial Narrow", sans-serif; font-weight: 900; font-size: 20px;
+  }
+  .intro { color: var(--muted); margin: 0 0 7px; font-size: 9px; }
+  .intro strong { color: #212121; }
+
+  /* Two-column grid of step cards */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .card {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--yellow);
+    border-radius: 2px;
+    padding: 5px 8px 6px;
+    background: #fff;
+    break-inside: avoid;
+  }
+  .card h2 {
+    font-size: 11.5px; color: var(--charcoal);
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+  }
+  .num {
+    background: var(--yellow); color: #000; font-family: "Arial Narrow", sans-serif;
+    font-weight: 900; width: 16px; height: 16px; border-radius: 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; flex: 0 0 auto;
+  }
+  ol, ul { margin: 2px 0 0; padding-left: 15px; }
+  li { margin-bottom: 1.5px; }
+  .card p { margin: 0 0 3px; }
+  .tip { color: var(--muted); font-style: italic; }
+  .k { font-weight: 700; color: var(--charcoal); }
+  .pill {
+    display: inline-block; background: var(--green); color: #fff;
+    font-weight: 700; font-size: 8px; letter-spacing: 0.04em;
+    padding: 1px 5px; border-radius: 2px; text-transform: uppercase;
+    vertical-align: middle;
+  }
+
+  /* Scoring section spanning full width */
+  .scoring { margin-top: 6px; border-left-color: var(--green); }
+  .scoring .cols { display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; align-items: start; }
+  table { border-collapse: collapse; width: 100%; margin-top: 3px; }
+  th, td { text-align: left; padding: 2px 5px; border-bottom: 1px solid var(--border); }
+  th {
+    font-family: "Arial Narrow", sans-serif; text-transform: uppercase;
+    font-size: 8px; letter-spacing: 0.05em; color: var(--muted);
+    background: var(--panel-2); border-bottom: 2px solid var(--yellow);
+  }
+  td:first-child { font-family: "Arial Narrow", sans-serif; font-weight: 700; }
+  .pts { color: var(--green); font-weight: 700; }
+  .example {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 2px; padding: 5px 7px; font-size: 8.5px;
+  }
+  .example .row { display: flex; justify-content: space-between; padding: 1.5px 0; }
+  .example .hit { color: var(--green); font-weight: 700; }
+  .example .miss { color: var(--muted); }
+
+  .foot {
+    margin-top: 6px; border-top: 1px solid var(--border); padding-top: 4px;
+    color: var(--muted); font-size: 8.2px; display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="logo">
+      <div class="mark"></div>
+      <div>
+        <h1>Fantasy Racing</h1>
+        <div class="tag">Player Guide</div>
+      </div>
+    </div>
+    <div class="tag">Predict the finish · Score the points · Top the standings</div>
+  </div>
+
+  <p class="intro">
+    Fantasy Racing lets you <strong>predict the finishing order</strong> of every class in a race.
+    When the results come in, you earn points for each driver you placed in <strong>exactly</strong>
+    the right spot. Points add up across the season on the Standings leaderboard. Here's how to play.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h2><span class="num">1</span> Create your account</h2>
+      <ol>
+        <li>On the <span class="k">Sign up</span> screen, enter a <span class="k">display name</span>
+          (this is how you'll appear on the leaderboard), your <span class="k">email</span>, and a
+          <span class="k">password</span> of at least 8 characters.</li>
+        <li>You're signed in automatically — no email confirmation needed.</li>
+        <li>Returning? Use <span class="k">Log in</span> with your email and password.</li>
+      </ol>
+      <p class="tip">On a phone, tap the ☰ menu (top-left) to reach Races, Standings, and Scoring.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">2</span> Find a race</h2>
+      <p>Open the <span class="k">Races</span> page. It's organized top to bottom:</p>
+      <ul>
+        <li><span class="k">To predict</span> — open races waiting for your picks.</li>
+        <li><span class="k">Scored</span> — races with results in <span class="pill">Results in</span></li>
+        <li><span class="k">All races</span> — a full list you can browse any time.</li>
+      </ul>
+      <p class="tip">Tap any race card to open it and see its classes (heats, features, etc.).</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">3</span> Make your predictions</h2>
+      <ol>
+        <li>Each <span class="k">class</span> shows its full list of entries.</li>
+        <li><span class="k">Drag</span> drivers into your predicted finishing order — or use the
+          <span class="k">▲ / ▼</span> arrows. Your <span class="k">#1 is your predicted winner</span>.</li>
+        <li>Press <span class="k">Save prediction</span>. Come back and
+          <span class="k">Update</span> it anytime until the class locks.</li>
+      </ol>
+      <p class="tip">🔒 Once an admin locks a class (or the race), predictions are final and can't be changed.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">4</span> Read the standings</h2>
+      <ul>
+        <li>The <span class="k">Standings</span> page ranks every player by total points across all events.</li>
+        <li><span class="k">Click a racer</span> to expand their per-event scores.</li>
+        <li>The live <span class="k">Top 5</span> leaderboard (left side on web, top on mobile)
+          refreshes automatically after each race is scored.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card scoring">
+    <h2 style="color:var(--green)"><span class="num" style="background:var(--green);color:#fff">P</span> How scoring works</h2>
+    <div class="cols">
+      <div>
+        <p>Scoring is <span class="k">F1-style and position-exact</span>: you earn a spot's points
+          only when the driver you placed there <span class="k">actually finished there</span>.
+          Nail P1 and you bank the top score; get P2 right too and you add those points on top.
+          <span class="k">Being one spot off scores nothing</span> — the match must be exact.</p>
+        <p>Your race score is the sum across every class in that event; the Standings add up every
+          race for the season. On a scored class you'll see your picks beside the finish —
+          columns <span class="k">Pos · # · Driver · Start · Your pick · Pts</span> — with the
+          rows you nailed highlighted and a <span class="pill">You scored N pts</span> badge.</p>
+      </div>
+      <div>
+        <table>
+          <thead><tr><th>Finish</th><th>Pts</th><th>Finish</th><th>Pts</th></tr></thead>
+          <tbody>
+            <tr><td>P1</td><td class="pts">25</td><td>P6</td><td class="pts">8</td></tr>
+            <tr><td>P2</td><td class="pts">18</td><td>P7</td><td class="pts">6</td></tr>
+            <tr><td>P3</td><td class="pts">15</td><td>P8</td><td class="pts">4</td></tr>
+            <tr><td>P4</td><td class="pts">12</td><td>P9</td><td class="pts">2</td></tr>
+            <tr><td>P5</td><td class="pts">10</td><td>P10</td><td class="pts">1</td></tr>
+          </tbody>
+        </table>
+        <p class="tip" style="margin:3px 0 0">Positions past P10 score nothing.</p>
+      </div>
+    </div>
+    <div class="example" style="margin-top:7px">
+      <div class="k" style="margin-bottom:2px">Quick example — you predicted A, B, C, D:</div>
+      <div class="row"><span class="hit">✓ Driver A finished P1 → you predicted P1</span><span class="hit pts">+25</span></div>
+      <div class="row"><span class="miss">✗ Driver B finished P3 → you predicted P2</span><span class="miss">0</span></div>
+      <div class="row"><span class="hit">✓ Driver C finished P3 → you predicted P3</span><span class="hit pts">+15</span></div>
+      <div class="row" style="border-top:1px solid var(--border);margin-top:2px;padding-top:3px">
+        <span class="k">Class total</span><span class="pts">40 pts</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Need the details? See the in-app <span class="k">Scoring</span> page for the live points table.</span>
+    <span>Good luck out there. 🏁</span>
+  </div>
+</body>
+</html>
