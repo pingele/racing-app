@@ -349,6 +349,45 @@ form input:focus {
   max-width: 400px;
   margin: 2.5rem auto;
 }
+
+/* Sign-up password checklist — turns green per rule as the player types. */
+.pw-rules {
+  list-style: none;
+  margin: -0.5rem 0 0.9rem;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.pw-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+.pw-rule-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.pw-rule.met {
+  color: var(--vermeer-green);
+}
+.pw-rule.met .pw-rule-icon {
+  background: var(--vermeer-green);
+  border-color: var(--vermeer-green);
+  color: #fff;
+}
 .error {
   color: var(--red);
   font-weight: 600;
