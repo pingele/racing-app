@@ -179,6 +179,29 @@ export default function Admin() {
     }
   };
 
+  const resetResults = async (race) => {
+    if (
+      !window.confirm(
+        `Reset results for "${race.name}"? This removes the entered finishing order and clears everyone's scores for this race. Players' predictions are kept, so you can re-enter results and re-score.`,
+      )
+    )
+      return;
+    setRowBusy((b) => ({ ...b, [race.id]: 'reset' }));
+    setBanner(null);
+    try {
+      const res = await api.resetRaceResults(race.id);
+      setBanner({
+        type: 'success',
+        text: `Reset "${race.name}" — removed ${res?.resultsDeleted ?? 0} result rows and cleared ${res?.scoresCleared ?? 0} scores. Predictions kept.`,
+      });
+      await refresh();
+    } catch (err) {
+      setBanner({ type: 'error', text: `Reset failed: ${err.message}` });
+    } finally {
+      setRowBusy((b) => ({ ...b, [race.id]: undefined }));
+    }
+  };
+
   const clearRacePredictions = async (race) => {
     if (
       !window.confirm(
@@ -323,6 +346,16 @@ export default function Admin() {
                       >
                         {busy === 'results' ? 'Importing…' : 'Import results'}
                       </button>
+                      {r.resultsScrapedAt && (
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => resetResults(r)}
+                          disabled={!!busy}
+                          title="Remove entered results and clear scores (keeps predictions)"
+                        >
+                          {busy === 'reset' ? 'Resetting…' : 'Reset results'}
+                        </button>
+                      )}
                       <button
                         className="btn btn-danger"
                         onClick={() => clearRacePredictions(r)}
