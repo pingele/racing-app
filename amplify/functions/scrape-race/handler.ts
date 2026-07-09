@@ -481,6 +481,60 @@ async function clearPredictions(raceId?: string) {
   return { raceId: raceId ?? null, deleted };
 }
 
+// ---- resetRaceResults (admin reset of results + scores) --------------------
+
+// Undo a race's results without deleting anyone's picks: delete every
+// RaceResult row for the race, clear pointsAwarded/scoredAt on every Prediction
+// for the race, and send the race back to 'scheduled'. Predictions themselves
+// (the ordered picks) are kept, so the race can be re-scored later. Idempotent.
+async function resetRaceResults(raceId: string) {
+  const client = await getClient();
+
+  const { data: race } = await client.models.Race.get({ id: raceId });
+  if (!race) throw new Error(`No race found for id ${raceId}.`);
+
+  // Delete all result rows for the race.
+  const results = await listAll(client.models.RaceResult.listRaceResultByRaceId, { raceId });
+  let resultsDeleted = 0;
+  for (const r of results as any[]) {
+    const { errors } = await client.models.RaceResult.delete({ id: r.id });
+    if (errors?.length) {
+      console.error(`[reset] failed to delete result ${r.id}`, errors);
+      throw new Error(`Failed to delete result ${r.id}: ${errors[0].message}`);
+    }
+    resultsDeleted++;
+  }
+
+  // Clear the scores on the race's predictions (keep the picks themselves).
+  const predictions = await listAll(client.models.Prediction.listPredictionByRaceId, { raceId });
+  let scoresCleared = 0;
+  for (const p of predictions as any[]) {
+    if (p.pointsAwarded == null && p.scoredAt == null) continue; // already unscored
+    const { errors } = await client.models.Prediction.update({
+      id: p.id,
+      pointsAwarded: null,
+      scoredAt: null,
+    });
+    if (errors?.length) {
+      console.error(`[reset] failed to clear score on prediction ${p.id}`, errors);
+      throw new Error(`Failed to clear score on prediction ${p.id}: ${errors[0].message}`);
+    }
+    scoresCleared++;
+  }
+
+  // Results are gone — send the race back to scheduled.
+  await client.models.Race.update({
+    id: raceId,
+    status: 'scheduled',
+    resultsScrapedAt: null,
+  });
+
+  console.log(
+    `[reset] race ${raceId}: deleted ${resultsDeleted} results, cleared ${scoresCleared} scores`,
+  );
+  return { raceId, resultsDeleted, scoresCleared };
+}
+
 // For each class, actual finish position -> the Entry id that finished there.
 async function buildFinishMaps(client: any, raceId: string) {
   const results = await listAll(client.models.RaceResult.listRaceResultByRaceId, { raceId });
@@ -570,6 +624,14 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
     const args = event.arguments as any;
     const raceId = args.raceId ? String(args.raceId).trim() : undefined;
     return clearPredictions(raceId || undefined);
+  }
+
+  // Admin reset: remove a race's results and clear its scores (keep predictions).
+  if (fieldName === 'resetRaceResults') {
+    const args = event.arguments as any;
+    const raceId = String(args.raceId ?? '').trim();
+    if (!raceId) throw new Error('raceId is required');
+    return resetRaceResults(raceId);
   }
 
   const eventId = String(event.arguments.eventId).trim();

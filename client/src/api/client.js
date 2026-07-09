@@ -219,6 +219,15 @@ export const api = {
     return parseJsonResult(data);
   },
 
+  // Reset a race's results: delete the entered results and clear every score
+  // for the race, keeping users' predictions intact. Backed by the scrape-race
+  // Lambda (predictions are owner-authed, so the browser can't clear others').
+  async resetRaceResults(raceId) {
+    const { data, errors } = await client.mutations.resetRaceResults({ raceId });
+    if (errors?.length) throw new Error(errors[0].message);
+    return parseJsonResult(data);
+  },
+
   // Save admin-entered finishing results and score predictions. `results` is an
   // array of { classId, rows: [{ entryId, status }] } in finish order (status is
   // null for a finisher, or 'DNF'/'DNS'/'DQ'). Backed by the scrape-race Lambda,
