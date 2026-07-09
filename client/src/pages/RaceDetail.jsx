@@ -26,6 +26,21 @@ function initialOrder(cls) {
   return [...saved, ...missing];
 }
 
+// Which section a class belongs to. Mirrors the ClassPanel render branches:
+// open (predict now) → scored (results in) → locked (entries shown, awaiting
+// results). Drives the top → middle → bottom grouping on the page.
+function classBucket(race, cls) {
+  if (cls.results.length > 0) return 'scored';
+  if (race.predictionsLocked || cls.locked) return 'locked';
+  return 'open';
+}
+
+const CLASS_SECTIONS = [
+  { key: 'open', title: 'Open to predict' },
+  { key: 'scored', title: 'Scored' },
+  { key: 'locked', title: 'Entries — locked, awaiting results' },
+];
+
 function ClassPanel({ race, cls, scoringRules, onSaved }) {
   const entryById = useMemo(
     () => new Map(cls.entries.map((e) => [e.id, e])),
@@ -335,15 +350,27 @@ export default function RaceDetail() {
           <p className="muted">No classes imported for this event yet.</p>
         </div>
       ) : (
-        classes.map((cls) => (
-          <ClassPanel
-            key={cls.id}
-            race={race}
-            cls={cls}
-            scoringRules={scoringRules}
-            onSaved={load}
-          />
-        ))
+        CLASS_SECTIONS.map(({ key, title }) => {
+          const inSection = classes.filter((cls) => classBucket(race, cls) === key);
+          if (inSection.length === 0) return null;
+          return (
+            <section key={key} className="races-section">
+              <div className="races-section-head">
+                <h2>{title}</h2>
+                <span className="races-count">{inSection.length}</span>
+              </div>
+              {inSection.map((cls) => (
+                <ClassPanel
+                  key={cls.id}
+                  race={race}
+                  cls={cls}
+                  scoringRules={scoringRules}
+                  onSaved={load}
+                />
+              ))}
+            </section>
+          );
+        })
       )}
     </section>
   );
