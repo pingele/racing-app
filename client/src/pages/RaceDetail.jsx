@@ -313,13 +313,9 @@ export default function RaceDetail() {
     <section>
       <div className="detail-head">
         <h1>{race.name}</h1>
-        <span
-          className={`badge ${
-            race.status === 'completed' ? 'badge-finished' : 'badge-scheduled'
-          }`}
-        >
-          {race.status === 'completed' ? 'Results in' : 'Open'}
-        </span>
+        {race.status !== 'completed' && (
+          <span className="badge badge-scheduled">Open</span>
+        )}
       </div>
       <p className="muted">
         {[race.track, race.location].filter(Boolean).join(' · ')}

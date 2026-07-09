@@ -23,9 +23,7 @@ function RaceCard({ race }) {
     <Link to={`/races/${race.id}`} className="race-card card">
       <div className="race-card-head">
         <h3>{race.name}</h3>
-        <span className={`badge ${scored ? 'badge-finished' : 'badge-scheduled'}`}>
-          {scored ? 'Results in' : 'Open'}
-        </span>
+        {!scored && <span className="badge badge-scheduled">Open</span>}
       </div>
       <div className="race-meta">
         {race.track && <span>{race.track}</span>}
@@ -131,13 +129,11 @@ export default function Races() {
                       <td data-label="Track">{r.track || '—'}</td>
                       <td data-label="Date">{formatDate(r.eventDate) || '—'}</td>
                       <td data-label="Status">
-                        <span
-                          className={`badge ${
-                            isScored(r) ? 'badge-finished' : 'badge-scheduled'
-                          }`}
-                        >
-                          {isScored(r) ? 'Results in' : 'Open'}
-                        </span>
+                        {isScored(r) ? (
+                          <span className="muted">—</span>
+                        ) : (
+                          <span className="badge badge-scheduled">Open</span>
+                        )}
                       </td>
                     </tr>
                   ))}
