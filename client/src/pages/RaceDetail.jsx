@@ -41,6 +41,20 @@ const CLASS_SECTIONS = [
   { key: 'locked', title: 'Entries — locked, awaiting results' },
 ];
 
+// Order classes within a section by session type: heats, then qualifying, then
+// features (mains), with anything else (general class entries) at the bottom.
+function raceTypeRank(cls) {
+  const t = (cls.raceType || '').toLowerCase();
+  if (t.includes('heat')) return 0;
+  if (t.includes('qual')) return 1;
+  if (t.includes('feature') || t.includes('main')) return 2;
+  return 3;
+}
+
+function byTypeThenOrder(a, b) {
+  return raceTypeRank(a) - raceTypeRank(b) || (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+}
+
 function ClassPanel({ race, cls, scoringRules, onSaved }) {
   const entryById = useMemo(
     () => new Map(cls.entries.map((e) => [e.id, e])),
@@ -351,7 +365,9 @@ export default function RaceDetail() {
         </div>
       ) : (
         CLASS_SECTIONS.map(({ key, title }) => {
-          const inSection = classes.filter((cls) => classBucket(race, cls) === key);
+          const inSection = classes
+            .filter((cls) => classBucket(race, cls) === key)
+            .sort(byTypeThenOrder);
           if (inSection.length === 0) return null;
           return (
             <section key={key} className="races-section">
