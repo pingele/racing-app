@@ -7,6 +7,7 @@ import type { Schema } from '../../data/resource.js';
 import {
   parseEventDetails,
   parseSessions,
+  parseEntries,
   parseResults,
 } from './myracepass.js';
 
@@ -149,35 +150,202 @@ async function upsertSessionClasses(
       created++;
     }
     classCount++;
-
-    const existingEntries = await listAll(client.models.Entry.listEntryByClassId, {
-      classId,
-    });
-    for (let ei = 0; ei < pc.entries.length; ei++) {
-      const pe = pc.entries[ei];
-      const match = existingEntries.find(
-        (e: any) =>
-          (pe.mrpEntryId && e.mrpEntryId === pe.mrpEntryId) ||
-          (e.driverName === pe.driverName && e.carNumber === pe.carNumber),
-      );
-      const entryFields = {
-        raceId,
-        classId,
-        mrpEntryId: pe.mrpEntryId ?? null,
-        carNumber: pe.carNumber ?? null,
-        driverName: pe.driverName,
-        hometown: pe.hometown ?? null,
-        sortOrder: ei,
-      };
-      if (match) {
-        await client.models.Entry.update({ id: (match as any).id, ...entryFields });
-      } else {
-        await client.models.Entry.create(entryFields);
-      }
-      entryCount++;
-    }
+    entryCount += await upsertEntries(client, raceId, classId, pc.entries);
   }
   return { classCount, entryCount, created };
+}
+
+// Create-or-update a class's entries in lineup order. Matches by mrpEntryId
+// (stable MyRacePass driver id) else driverName+carNumber, refreshing sortOrder
+// to the current order. Never deletes; returns the number processed. Shared by
+// the session (races-page) and entry-list (fallback) importers.
+async function upsertEntries(
+  client: DataClient,
+  raceId: string,
+  classId: string,
+  entries: { mrpEntryId: string | null; carNumber: string | null; driverName: string; hometown: string | null }[],
+) {
+  const existingEntries = await listAll(client.models.Entry.listEntryByClassId, {
+    classId,
+  });
+  for (let ei = 0; ei < entries.length; ei++) {
+    const pe = entries[ei];
+    const match = existingEntries.find(
+      (e: any) =>
+        (pe.mrpEntryId && e.mrpEntryId === pe.mrpEntryId) ||
+        (e.driverName === pe.driverName && e.carNumber === pe.carNumber),
+    );
+    const entryFields = {
+      raceId,
+      classId,
+      mrpEntryId: pe.mrpEntryId ?? null,
+      carNumber: pe.carNumber ?? null,
+      driverName: pe.driverName,
+      hometown: pe.hometown ?? null,
+      sortOrder: ei,
+    };
+    if (match) {
+      await client.models.Entry.update({ id: (match as any).id, ...entryFields });
+    } else {
+      await client.models.Entry.create(entryFields);
+    }
+  }
+  return entries.length;
+}
+
+// ---- entry-list fallback (before lineups are drawn) -------------------------
+
+// A "provisional" class is one imported from the flat entry list (`/entries`)
+// rather than a drawn Heat/Feature lineup. It has no raceType — that's how it's
+// told apart from a real session class (session classes always carry a
+// raceType like "A Feature 1"). Provisional classes let players predict the
+// full field before lineups post; they're replaced once real sessions arrive.
+const isProvisionalClass = (c: any) =>
+  c.raceType == null || String(c.raceType).trim() === '';
+
+// The division id behind a class's mrpClassId. Entry-list classes use the bare
+// division id ("760621"); session classes use a composite ("760621-2"). Both map
+// to the same division id, so a session can be matched to the provisional class
+// it supersedes.
+const divisionIdOf = (mrpClassId: string | null | undefined) =>
+  mrpClassId ? String(mrpClassId).split('-')[0] : null;
+
+// Import each division from the entry list as a single provisional class
+// (raceType null) with its full field. Matches existing provisional classes by
+// division mrpClassId (else name) so re-runs update in place; never touches
+// session classes.
+async function upsertEntryListClasses(
+  client: DataClient,
+  raceId: string,
+  parsedClasses: ReturnType<typeof parseEntries>,
+) {
+  const existingClasses = await listAll(client.models.RaceClass.listRaceClassByRaceId, {
+    raceId,
+  });
+  const provisional = (existingClasses as any[]).filter(isProvisionalClass);
+  let classCount = 0;
+  let entryCount = 0;
+  let created = 0;
+  for (let ci = 0; ci < parsedClasses.length; ci++) {
+    const pc = parsedClasses[ci];
+    const matchClass = pc.mrpClassId
+      ? provisional.find((c) => c.mrpClassId === pc.mrpClassId)
+      : provisional.find((c) => sameName(c.name, pc.name));
+    const classFields = {
+      raceId,
+      mrpClassId: pc.mrpClassId ?? null,
+      name: pc.name,
+      raceType: null, // provisional: distinguishes entry-list class from a session
+      series: pc.series ?? null,
+      entryCount: pc.entryCount ?? pc.entries.length,
+      sortOrder: ci,
+    };
+    let classId: string;
+    if (matchClass) {
+      const { data } = await client.models.RaceClass.update({
+        id: matchClass.id,
+        ...classFields,
+      });
+      classId = data!.id;
+    } else {
+      const { data } = await client.models.RaceClass.create(classFields);
+      classId = data!.id;
+      created++;
+    }
+    classCount++;
+    entryCount += await upsertEntries(client, raceId, classId, pc.entries);
+  }
+  return { classCount, entryCount, created };
+}
+
+// Delete a class and everything hanging off it (entries, predictions, results).
+// Used to retire a provisional class once its real sessions arrive.
+async function deleteClassDeep(client: DataClient, classId: string) {
+  const predictions = await listAll(client.models.Prediction.listPredictionByClassId, {
+    classId,
+  });
+  for (const p of predictions as any[]) {
+    await client.models.Prediction.delete({ id: p.id });
+  }
+  const results = await listAll(client.models.RaceResult.listRaceResultByClassId, {
+    classId,
+  });
+  for (const r of results as any[]) {
+    await client.models.RaceResult.delete({ id: r.id });
+  }
+  const entries = await listAll(client.models.Entry.listEntryByClassId, { classId });
+  for (const e of entries as any[]) {
+    await client.models.Entry.delete({ id: e.id });
+  }
+  await client.models.RaceClass.delete({ id: classId });
+}
+
+// Once real Heat/Feature sessions are imported, drop any provisional entry-list
+// class for a division those sessions now cover. A whole-field prediction can't
+// be mapped onto specific sessions, so it's discarded along with the class.
+// Returns the number of provisional classes retired.
+async function reapProvisionalClasses(
+  client: DataClient,
+  raceId: string,
+  parsedSessions: ReturnType<typeof parseSessions>,
+) {
+  const existingClasses = await listAll(client.models.RaceClass.listRaceClassByRaceId, {
+    raceId,
+  });
+  const provisional = (existingClasses as any[]).filter(isProvisionalClass);
+  if (!provisional.length) return 0;
+
+  const coveredDivisionIds = new Set(
+    parsedSessions.map((s) => divisionIdOf(s.mrpClassId)).filter(Boolean),
+  );
+  const coveredNames = new Set(
+    parsedSessions.map((s) => (s.name ?? '').trim().toLowerCase()),
+  );
+
+  let reaped = 0;
+  for (const c of provisional) {
+    const divId = divisionIdOf(c.mrpClassId);
+    const covered =
+      (divId && coveredDivisionIds.has(divId)) ||
+      coveredNames.has((c.name ?? '').trim().toLowerCase());
+    if (!covered) continue;
+    await deleteClassDeep(client, c.id);
+    reaped++;
+  }
+  if (reaped) {
+    console.log(`[import] retired ${reaped} provisional entry-list class(es) now covered by sessions`);
+  }
+  return reaped;
+}
+
+// ---- classes + entries: sessions, falling back to the entry list ------------
+
+// Import a race's classes and entries from the races page (drawn Heat/Feature
+// lineups). If no lineups are posted yet, fall back to the flat entry list so
+// the field can be predicted early. Once lineups later appear, the sessions
+// import retires the provisional entry-list classes it replaces.
+async function importClassesAndEntries(
+  client: DataClient,
+  raceId: string,
+  eventId: string,
+) {
+  const parsedSessions = await fetchParsed(
+    `${BASE}/events/${eventId}/races`,
+    parseSessions,
+  );
+  if (parsedSessions.length) {
+    const res = await upsertSessionClasses(client, raceId, parsedSessions);
+    const reaped = await reapProvisionalClasses(client, raceId, parsedSessions);
+    return { source: 'sessions' as const, reaped, ...res };
+  }
+
+  // No drawn lineups — fall back to the entry list if it's been published.
+  const parsedEntryClasses = await fetchParsed(
+    `${BASE}/events/${eventId}/entries`,
+    parseEntries,
+  );
+  const res = await upsertEntryListClasses(client, raceId, parsedEntryClasses);
+  return { source: 'entries' as const, reaped: 0, ...res };
 }
 
 // ---- importRaceDetails ------------------------------------------------------
@@ -185,11 +353,7 @@ async function upsertSessionClasses(
 async function importRaceDetails(eventId: string, importedBy: string) {
   const client = await getClient();
   const detailsUrl = `${BASE}/events/${eventId}`;
-  const [detailsHtml, parsedSessions] = await Promise.all([
-    fetchHtml(detailsUrl),
-    fetchParsed(`${BASE}/events/${eventId}/races`, parseSessions),
-  ]);
-
+  const detailsHtml = await fetchHtml(detailsUrl);
   const details = parseEventDetails(detailsHtml);
 
   // Upsert the Race by mrpEventId.
@@ -223,24 +387,27 @@ async function importRaceDetails(eventId: string, importedBy: string) {
     raceId = data!.id;
   }
 
-  // Upsert per-session classes + their lineups from the races page.
-  const { classCount, entryCount } = await upsertSessionClasses(
+  // Import classes + entries from the drawn lineups, or the entry list if
+  // lineups aren't posted yet.
+  const { classCount, entryCount, source } = await importClassesAndEntries(
     client,
     raceId,
-    parsedSessions,
+    eventId,
   );
 
-  return { raceId, mrpEventId: eventId, name: raceFields.name, classCount, entryCount };
+  return { raceId, mrpEventId: eventId, name: raceFields.name, classCount, entryCount, source };
 }
 
 // ---- importSessions (classes + entries) -------------------------------------
 
-// Import every predictable session (Feature/Heat) for an already-imported race
-// from its races page, each as its own class with its lineup as entries. Backs
-// both the "Import classes" and "Import entries" admin actions — on MyRacePass a
-// session and its lineup are posted together, so there's no separate class-only
-// step. Admins run it repeatedly on race day as heat lineups finalize; the
-// Race's event details (name/track/date) are left untouched.
+// Import classes + entries for an already-imported race. Prefers the drawn
+// Feature/Heat lineups from the races page (each session its own class); if no
+// lineups are posted yet, falls back to the flat entry list so the field can be
+// predicted early (see importClassesAndEntries). Backs both the "Import classes"
+// and "Import entries" admin actions — on MyRacePass a session and its lineup are
+// posted together, so there's no separate class-only step. Admins run it
+// repeatedly on race day as heat lineups finalize; the Race's event details
+// (name/track/date) are left untouched.
 async function importSessions(eventId: string) {
   const client = await getClient();
 
@@ -254,17 +421,19 @@ async function importSessions(eventId: string) {
     );
   }
 
-  const parsedSessions = await fetchParsed(
-    `${BASE}/events/${eventId}/races`,
-    parseSessions,
-  );
-  const { classCount, entryCount, created } = await upsertSessionClasses(
-    client,
-    race.id,
-    parsedSessions,
-  );
+  const { classCount, entryCount, created, source, reaped } =
+    await importClassesAndEntries(client, race.id, eventId);
 
-  return { raceId: race.id, mrpEventId: eventId, name: race.name, classCount, entryCount, created };
+  return {
+    raceId: race.id,
+    mrpEventId: eventId,
+    name: race.name,
+    classCount,
+    entryCount,
+    created,
+    source,
+    reaped,
+  };
 }
 
 // ---- importRaceResults + scoring -------------------------------------------
