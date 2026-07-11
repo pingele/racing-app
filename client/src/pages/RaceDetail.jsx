@@ -26,16 +26,26 @@ function initialOrder(cls) {
   return [...saved, ...missing];
 }
 
+// A provisional entry-list class: imported from MyRacePass's flat entry list
+// before Heat/Feature lineups are drawn, so it has no session race type. It's
+// view-only — you predict real lineups, not a flat entry list — and is replaced
+// by the real sessions once those post.
+function isEntryList(cls) {
+  return !cls.raceType;
+}
+
 // Which section a class belongs to. Mirrors the ClassPanel render branches:
-// open (predict now) → scored (results in) → locked (entries shown, awaiting
-// results). Drives the top → middle → bottom grouping on the page.
+// entry list (view only) → open (predict now) → scored (results in) → locked
+// (entries shown, awaiting results). Drives the grouping on the page.
 function classBucket(race, cls) {
   if (cls.results.length > 0) return 'scored';
+  if (isEntryList(cls)) return 'entrylist';
   if (race.predictionsLocked || cls.locked) return 'locked';
   return 'open';
 }
 
 const CLASS_SECTIONS = [
+  { key: 'entrylist', title: 'Entry list — predictions open once lineups are posted' },
   { key: 'open', title: 'Open to predict' },
   { key: 'scored', title: 'Scored' },
   { key: 'locked', title: 'Entries — locked, awaiting results' },
@@ -208,6 +218,39 @@ function ClassPanel({ race, cls, scoringRules, onSaved }) {
           <p className="muted compare-legend">
             “Your pick” is the driver you predicted to finish in that position.
           </p>
+        )}
+      </div>
+    );
+  }
+
+  // ---- entry list (before lineups are drawn): view only, no prediction -----
+  if (isEntryList(cls)) {
+    return (
+      <div className="card">
+        <div className="results-head">
+          <h2>
+            {cls.name}
+            {cls.series ? <span className="muted"> · {cls.series}</span> : null}
+          </h2>
+          <span className="muted">{cls.entries.length} entries</span>
+        </div>
+        <p className="muted">
+          Entry list only — Heat/Feature lineups haven't been posted yet.
+          Predictions open once they are.
+        </p>
+        {cls.entries.length === 0 ? (
+          <p className="muted">No entries listed for this class yet.</p>
+        ) : (
+          <ol className="predict-list">
+            {cls.entries.map((e) => (
+              <li key={e.id} className="predict-row">
+                <span className="predict-pos" />
+                <span className="driver-num">#{e.carNumber}</span>
+                <span className="predict-name">{e.driverName}</span>
+                <span className="muted predict-home">{e.hometown}</span>
+              </li>
+            ))}
+          </ol>
         )}
       </div>
     );

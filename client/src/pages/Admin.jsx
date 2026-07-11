@@ -117,9 +117,9 @@ export default function Admin() {
       } else if (res?.source === 'entries') {
         banner = {
           type: 'info',
-          text: `Lineups aren't drawn yet for "${race.name}", so the entry list was imported instead — ${classCount} ${
+          text: `Lineups aren't drawn yet for "${race.name}", so the entry list was imported (view-only) — ${classCount} ${
             classCount === 1 ? 'class' : 'classes'
-          }, ${entryCount} entries. Players can predict the full field now; re-import once Features/Heats post to switch to per-session predictions.`,
+          }, ${entryCount} entries. Players can see the field but can't predict yet; re-import once Features/Heats post to open per-session predictions.`,
         };
       } else {
         banner = {
