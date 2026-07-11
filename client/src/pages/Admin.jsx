@@ -107,19 +107,29 @@ export default function Admin() {
     try {
       const res = await api.importRaceEntries(race.mrpEventId);
       const entryCount = res?.entryCount ?? 0;
-      setBanner(
-        entryCount === 0
-          ? {
-              type: 'info',
-              text: `No Feature/Heat lineups posted on MyRacePass yet for "${race.name}". Lineups are usually released on race day — try again once they're posted.`,
-            }
-          : {
-              type: 'success',
-              text: `Lineups imported for "${race.name}" — ${
-                res?.classCount ?? 0
-              } sessions (Features + Heats), ${entryCount} entries.`,
-            },
-      );
+      const classCount = res?.classCount ?? 0;
+      let banner;
+      if (entryCount === 0) {
+        banner = {
+          type: 'info',
+          text: `Nothing posted on MyRacePass yet for "${race.name}" — no lineups and no entry list. Try again once entries or race-day lineups are posted.`,
+        };
+      } else if (res?.source === 'entries') {
+        banner = {
+          type: 'info',
+          text: `Lineups aren't drawn yet for "${race.name}", so the entry list was imported instead — ${classCount} ${
+            classCount === 1 ? 'class' : 'classes'
+          }, ${entryCount} entries. Players can predict the full field now; re-import once Features/Heats post to switch to per-session predictions.`,
+        };
+      } else {
+        banner = {
+          type: 'success',
+          text: `Lineups imported for "${race.name}" — ${classCount} sessions (Features + Heats), ${entryCount} entries.${
+            res?.reaped ? ` Replaced ${res.reaped} provisional entry-list ${res.reaped === 1 ? 'class' : 'classes'}.` : ''
+          }`,
+        };
+      }
+      setBanner(banner);
       await refresh();
     } catch (err) {
       setBanner({ type: 'error', text: `Entries import failed: ${err.message}` });
