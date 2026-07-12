@@ -242,11 +242,21 @@ export const api = {
     return parseJsonResult(data);
   },
 
-  // Build heat/feature lineups manually from an imported entry list. `lineups` is
-  // { divisions: [{ provisionalClassId, name, sessions: [{ raceType, entryIds }] }] }
-  // where entryIds reference the provisional class's entries. Backed by the
-  // scrape-race Lambda, which creates the manual classes, retires the provisional
-  // class, and cleans up predictions on reshaped/removed classes.
+  // Read the entry-list field per division (full field + mrpEntryId) for the
+  // Build Lineups page. Fetched fresh from MyRacePass by the Lambda; persists
+  // nothing. Returns { divisions: [{ mrpClassId, name, series, entries[] }] }.
+  async getRaceField(raceId) {
+    const { data, errors } = await client.queries.getRaceField({ raceId });
+    if (errors?.length) throw new Error(errors[0].message);
+    return parseJsonResult(data);
+  },
+
+  // Build heat/feature lineups manually. `lineups` is
+  // { divisions: [{ provisionalClassId?, name, sessions: [{ raceType, drivers }] }] }
+  // where each driver is { mrpEntryId, carNumber, driverName, hometown } cloned
+  // from the entry-list field. Backed by the scrape-race Lambda, which creates the
+  // manual classes (skipping any session already imported for real), retires the
+  // provisional class, and cleans up predictions on reshaped/removed classes.
   async saveManualLineups(raceId, lineups) {
     const { data, errors } = await client.mutations.saveManualLineups({
       raceId,
