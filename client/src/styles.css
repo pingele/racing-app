@@ -1199,3 +1199,30 @@ a.calendar-grid-race:hover,
     max-width: 8rem;
   }
 }
+
+/* "New version available" reload prompt (see UpdatePrompt.jsx). */
+.update-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem 1rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--vermeer-green);
+  border-radius: 4px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+.update-toast-text {
+  font-weight: 600;
+}
+.update-toast-actions {
+  display: flex;
+  gap: 0.5rem;
+}
