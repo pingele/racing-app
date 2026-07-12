@@ -524,8 +524,10 @@ async function reconcileManualEntries(
 // create-or-update one "manual" class per session, skip any session that already
 // exists as a real (imported) class so an admin can't duplicate/clobber a drawn
 // lineup, retire manual classes no longer wanted, then delete the provisional
-// entry-list class if one was consumed. Reshaping a class that has predictions
-// clears them so nobody is scored against a stale lineup.
+// entry-list class if one was consumed. Reshaping a class that has (unscored)
+// predictions clears them so nobody is scored against a stale lineup — but a
+// class that already has RESULTS is never reshaped, deleted, or cleared, so
+// re-saving lineups can't wipe scores/standings.
 async function saveManualLineups(raceId: string, lineups: ManualLineups) {
   const client = await getClient();
 
@@ -535,11 +537,18 @@ async function saveManualLineups(raceId: string, lineups: ManualLineups) {
   const existingClasses = await listAll(client.models.RaceClass.listRaceClassByRaceId, {
     raceId,
   });
+  // Classes that already have results are locked: editing lineups must never
+  // touch a scored class (would delete its scored predictions).
+  const allResults = await listAll(client.models.RaceResult.listRaceResultByRaceId, {
+    raceId,
+  });
+  const scoredClassIds = new Set((allResults as any[]).map((r) => r.classId));
 
   let classesCreated = 0;
   let classesDeleted = 0;
   let predictionsCleared = 0;
   let skippedExisting = 0;
+  let skippedScored = 0;
   // Sort manual classes after any imported ones (which use low sortOrders).
   let sortOrder = 1000;
 
@@ -583,6 +592,13 @@ async function saveManualLineups(raceId: string, lineups: ManualLineups) {
       };
 
       const match = manualForDivision.find((c) => sameName(c.raceType, rt));
+      // A scored class is locked — keep it exactly as-is (don't reshape entries
+      // or clear its predictions).
+      if (match && scoredClassIds.has(match.id)) {
+        keptClassIds.add(match.id);
+        skippedScored++;
+        continue;
+      }
       let classId: string;
       if (match) {
         const { data } = await client.models.RaceClass.update({ id: match.id, ...classFields });
@@ -607,9 +623,10 @@ async function saveManualLineups(raceId: string, lineups: ManualLineups) {
       }
     }
 
-    // Retire manual sessions for this division that are no longer wanted.
+    // Retire manual sessions for this division that are no longer wanted — but
+    // never a scored class (deleting it would drop its scored predictions).
     for (const c of manualForDivision) {
-      if (!keptClassIds.has(c.id)) {
+      if (!keptClassIds.has(c.id) && !scoredClassIds.has(c.id)) {
         await deleteClassDeep(client, c.id);
         classesDeleted++;
       }
@@ -630,6 +647,7 @@ async function saveManualLineups(raceId: string, lineups: ManualLineups) {
     divisions: (lineups.divisions ?? []).length,
     classesCreated,
     skippedExisting,
+    skippedScored,
     classesDeleted,
     predictionsCleared,
   };
