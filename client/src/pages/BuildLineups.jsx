@@ -292,6 +292,7 @@ export default function BuildLineups() {
   const [race, setRace] = useState(null);
   const [divisions, setDivisions] = useState(null); // derived, from field + classes
   const [stateByDiv, setStateByDiv] = useState({});
+  const [dirty, setDirty] = useState(() => new Set()); // division names the admin edited
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState(null);
@@ -315,19 +316,31 @@ export default function BuildLineups() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raceId]);
 
-  const setStateFor = (name) => (updater) =>
+  const setStateFor = (name) => (updater) => {
+    // Mark this division edited so only it is submitted — re-saving untouched
+    // divisions could reconcile (and clear predictions on) lineups the admin
+    // never meant to change.
+    setDirty((prev) => (prev.has(name) ? prev : new Set(prev).add(name)));
     setStateByDiv((prev) => ({
       ...prev,
       [name]: typeof updater === 'function' ? updater(prev[name]) : updater,
     }));
+  };
 
   if (error) return <p className="error">{error}</p>;
   if (!race || !divisions) return <p>Loading field…</p>;
 
   const save = async () => {
-    const payload = buildPayload(divisions, stateByDiv);
+    // Only submit divisions the admin actually edited this session.
+    const editedDivisions = divisions.filter((d) => dirty.has(d.field.name));
+    const payload = buildPayload(editedDivisions, stateByDiv);
     if (!payload.length) {
-      setBanner({ type: 'error', text: 'Assign at least one driver to a heat or feature first.' });
+      setBanner({
+        type: 'error',
+        text: dirty.size
+          ? 'Assign at least one driver to a heat or feature first.'
+          : 'No changes to save yet — edit a division first.',
+      });
       return;
     }
     setSaving(true);
@@ -337,6 +350,7 @@ export default function BuildLineups() {
       const bits = [`${res?.classesCreated ?? 0} created`];
       if (res?.predictionsCleared) bits.push(`${res.predictionsCleared} predictions cleared`);
       if (res?.skippedExisting) bits.push(`${res.skippedExisting} skipped (already imported)`);
+      if (res?.skippedScored) bits.push(`${res.skippedScored} left as-is (already scored)`);
       // Deliberately DON'T re-read from the server here. saveManualLineups just
       // created the manual class + its entries and deleted the provisional one;
       // getRace reads those back through eventually-consistent GSIs, so an
@@ -354,6 +368,7 @@ export default function BuildLineups() {
             : d,
         ),
       );
+      setDirty(new Set()); // saved divisions are clean again
       setBanner({
         type: 'success',
         text: `Lineups saved for "${race.name}" — ${bits.join(', ')}. Keep editing and Save again, or reload to see the latest.`,
