@@ -123,11 +123,26 @@ async function upsertSessionClasses(
   let created = 0;
   for (let ci = 0; ci < parsedSessions.length; ci++) {
     const pc = parsedSessions[ci];
-    const matchClass = pc.mrpClassId
-      ? existingClasses.find((c: any) => c.mrpClassId === pc.mrpClassId)
-      : existingClasses.find(
-          (c: any) => sameName(c.name, pc.name) && sameName(c.raceType, pc.raceType),
-        );
+    const matchClass =
+      (pc.mrpClassId
+        ? existingClasses.find((c: any) => c.mrpClassId === pc.mrpClassId)
+        : existingClasses.find(
+            (c: any) => sameName(c.name, pc.name) && sameName(c.raceType, pc.raceType),
+          )) ||
+      // Adopt a manually-built class for the same session (division + race type)
+      // when the real scrape finally arrives: update it in place and take
+      // ownership by writing its mrpClassId (via classFields below), rather than
+      // stacking a duplicate on top of players' existing predictions. Best-effort
+      // — if MyRacePass's label differs (e.g. "A Feature 1" vs "A Feature") this
+      // misses and a duplicate appears. Manual classes are never reaped.
+      (pc.mrpClassId
+        ? existingClasses.find(
+            (c: any) =>
+              c.manual === true &&
+              sameName(c.name, pc.name) &&
+              sameName(c.raceType, pc.raceType),
+          )
+        : undefined);
     const classFields = {
       raceId,
       mrpClassId: pc.mrpClassId ?? null,
@@ -136,6 +151,7 @@ async function upsertSessionClasses(
       series: null,
       entryCount: pc.entryCount ?? pc.entries.length,
       sortOrder: ci,
+      manual: null, // a scraped session is authoritative; clear any manual flag
     };
     let classId: string;
     if (matchClass) {
@@ -436,6 +452,186 @@ async function importSessions(eventId: string) {
   };
 }
 
+// ---- saveManualLineups (admin-built heats/features) ------------------------
+
+type ManualSession = { raceType: string; entryIds: string[] };
+type ManualDivision = {
+  provisionalClassId?: string | null;
+  name: string;
+  sessions: ManualSession[];
+};
+type ManualLineups = { divisions: ManualDivision[] };
+
+// Reconcile a manual class's entries to exactly `desired` (cloned from the
+// source entry list). Matches existing rows by mrpEntryId (else driverName+
+// carNumber) so a surviving driver keeps its Entry id and any prediction that
+// references it stays valid; creates newcomers; deletes drop-offs. Returns
+// whether the membership set changed (added or removed a driver), which is the
+// signal to clear stale predictions for the class.
+async function reconcileManualEntries(
+  client: DataClient,
+  raceId: string,
+  classId: string,
+  desired: { mrpEntryId: string | null; carNumber: string | null; driverName: string; hometown: string | null }[],
+): Promise<{ changed: boolean }> {
+  const existing = await listAll(client.models.Entry.listEntryByClassId, { classId });
+  const keyOf = (e: any) => e.mrpEntryId || `${e.driverName}|${e.carNumber}`;
+  const desiredKeys = new Set(desired.map(keyOf));
+  const existingByKey = new Map<string, any>();
+  for (const e of existing as any[]) existingByKey.set(keyOf(e), e);
+
+  let changed = false;
+  // Delete drop-offs.
+  for (const e of existing as any[]) {
+    if (!desiredKeys.has(keyOf(e))) {
+      await client.models.Entry.delete({ id: e.id });
+      changed = true;
+    }
+  }
+  // Create/update to the desired order.
+  for (let i = 0; i < desired.length; i++) {
+    const pe = desired[i];
+    const match = existingByKey.get(keyOf(pe));
+    const fields = {
+      raceId,
+      classId,
+      mrpEntryId: pe.mrpEntryId ?? null,
+      carNumber: pe.carNumber ?? null,
+      driverName: pe.driverName,
+      hometown: pe.hometown ?? null,
+      sortOrder: i,
+    };
+    if (match) {
+      await client.models.Entry.update({ id: match.id, ...fields });
+    } else {
+      await client.models.Entry.create(fields);
+      changed = true;
+    }
+  }
+  return { changed };
+}
+
+// Build heat/feature lineups from an already-imported entry list. For each
+// division: create-or-update one "manual" class per session (cloning the chosen
+// entries so they keep their mrpEntryId for later results matching), retire
+// manual classes no longer wanted, then delete the provisional entry-list class
+// the lineups were drawn from. Reshaping a class that already has predictions
+// clears those predictions so nobody is scored against a stale lineup.
+async function saveManualLineups(raceId: string, lineups: ManualLineups) {
+  const client = await getClient();
+
+  const { data: race } = await client.models.Race.get({ id: raceId });
+  if (!race) throw new Error(`No race found for id ${raceId}.`);
+
+  const existingClasses = await listAll(client.models.RaceClass.listRaceClassByRaceId, {
+    raceId,
+  });
+
+  let classesCreated = 0;
+  let classesDeleted = 0;
+  let predictionsCleared = 0;
+  let sortOrder = 0;
+
+  for (const division of lineups.divisions ?? []) {
+    if (!division?.name || !Array.isArray(division.sessions)) continue;
+
+    // Source drivers come from the provisional class's entries (they carry the
+    // real mrpEntryId). Map by Entry id so a session references them by id.
+    const sourceEntries = division.provisionalClassId
+      ? await listAll(client.models.Entry.listEntryByClassId, {
+          classId: division.provisionalClassId,
+        })
+      : [];
+    const sourceById = new Map<string, any>(
+      (sourceEntries as any[]).map((e) => [e.id, e]),
+    );
+
+    const manualForDivision = (existingClasses as any[]).filter(
+      (c) => c.manual === true && sameName(c.name, division.name),
+    );
+    const keptClassIds = new Set<string>();
+
+    for (const session of division.sessions) {
+      const rt = (session?.raceType ?? '').trim();
+      const entryIds = Array.isArray(session?.entryIds) ? session.entryIds : [];
+      if (!rt || entryIds.length === 0) continue; // skip empty sessions
+
+      const desired = entryIds
+        .map((id) => sourceById.get(id))
+        .filter(Boolean)
+        .map((e: any) => ({
+          mrpEntryId: e.mrpEntryId ?? null,
+          carNumber: e.carNumber ?? null,
+          driverName: e.driverName,
+          hometown: e.hometown ?? null,
+        }));
+      if (!desired.length) continue;
+
+      const classFields = {
+        raceId,
+        mrpClassId: null,
+        name: division.name,
+        raceType: rt,
+        series: null,
+        entryCount: desired.length,
+        sortOrder: sortOrder++,
+        manual: true,
+      };
+
+      const match = manualForDivision.find((c) => sameName(c.raceType, rt));
+      let classId: string;
+      if (match) {
+        const { data } = await client.models.RaceClass.update({ id: match.id, ...classFields });
+        classId = data!.id;
+      } else {
+        const { data } = await client.models.RaceClass.create(classFields);
+        classId = data!.id;
+        classesCreated++;
+      }
+      keptClassIds.add(classId);
+
+      const { changed } = await reconcileManualEntries(client, raceId, classId, desired);
+      // A changed lineup invalidates predictions made against the old one.
+      if (changed) {
+        const preds = await listAll(client.models.Prediction.listPredictionByClassId, {
+          classId,
+        });
+        for (const p of preds as any[]) {
+          await client.models.Prediction.delete({ id: p.id });
+          predictionsCleared++;
+        }
+      }
+    }
+
+    // Retire manual sessions for this division that are no longer wanted.
+    for (const c of manualForDivision) {
+      if (!keptClassIds.has(c.id)) {
+        await deleteClassDeep(client, c.id);
+        classesDeleted++;
+      }
+    }
+
+    // Retire the provisional entry-list class the lineups were drawn from.
+    if (division.provisionalClassId) {
+      const prov = (existingClasses as any[]).find(
+        (c) => c.id === division.provisionalClassId,
+      );
+      if (prov && isProvisionalClass(prov)) {
+        await deleteClassDeep(client, prov.id);
+        classesDeleted++;
+      }
+    }
+  }
+
+  return {
+    raceId,
+    divisions: (lineups.divisions ?? []).length,
+    classesCreated,
+    classesDeleted,
+    predictionsCleared,
+  };
+}
+
 // ---- importRaceResults + scoring -------------------------------------------
 
 async function ensureScoringRules(client: any): Promise<Map<number, number>> {
@@ -471,10 +667,6 @@ async function importRaceResults(eventId: string) {
 
   const classes = await listAll(client.models.RaceClass.listRaceClassByRaceId, { raceId });
   const allEntries = await listAll(client.models.Entry.listEntryByRaceId, { raceId });
-  const entryByMrpId = new Map<string, any>();
-  for (const e of allEntries as any[]) {
-    if (e.mrpEntryId) entryByMrpId.set(e.mrpEntryId, e);
-  }
 
   let resultRowCount = 0;
   for (const rc of resultClasses) {
@@ -490,6 +682,14 @@ async function importRaceResults(eventId: string) {
         (c) => sameName(c.name, rc.className) && /feature/i.test(c.raceType || ''),
       );
     if (!cls) continue;
+    // Resolve driver ids against THIS class's entries only. A driver runs both a
+    // heat and the feature, so a race-wide mrpEntryId map would collapse to one
+    // entry (last wins) and link feature results to the heat's Entry id — feature
+    // predictions would then never score.
+    const entryByMrpId = new Map<string, any>();
+    for (const e of allEntries as any[]) {
+      if (e.classId === cls.id && e.mrpEntryId) entryByMrpId.set(e.mrpEntryId, e);
+    }
     const existingResults = await listAll(
       client.models.RaceResult.listRaceResultByClassId,
       { classId: cls.id },
@@ -786,6 +986,16 @@ export const handler: AppSyncResolverHandler<Args, unknown> = async (event) => {
     const results =
       typeof args.results === 'string' ? JSON.parse(args.results) : args.results;
     return enterRaceResults(raceId, results as ManualResultClass[]);
+  }
+
+  // Admin manual lineups: raceId + a JSON payload of divisions/sessions/entryIds.
+  if (fieldName === 'saveManualLineups') {
+    const args = event.arguments as any;
+    const raceId = String(args.raceId ?? '').trim();
+    if (!raceId) throw new Error('raceId is required');
+    const lineups =
+      typeof args.lineups === 'string' ? JSON.parse(args.lineups) : args.lineups;
+    return saveManualLineups(raceId, lineups as ManualLineups);
   }
 
   // Admin reset: clear predictions for one race (raceId) or all races (no arg).

@@ -344,6 +344,13 @@ export default function Admin() {
                         {busy === 'entries' ? 'Importing…' : 'Import entries'}
                       </button>
                       <Link
+                        to={`/admin/races/${r.id}/lineups`}
+                        className="btn btn-primary"
+                        title="Manually split the imported entry list into Heats & Features"
+                      >
+                        Build lineups
+                      </Link>
+                      <Link
                         to={`/admin/races/${r.id}/results`}
                         className="btn btn-primary"
                       >
