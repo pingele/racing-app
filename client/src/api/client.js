@@ -242,6 +242,20 @@ export const api = {
     return parseJsonResult(data);
   },
 
+  // Build heat/feature lineups manually from an imported entry list. `lineups` is
+  // { divisions: [{ provisionalClassId, name, sessions: [{ raceType, entryIds }] }] }
+  // where entryIds reference the provisional class's entries. Backed by the
+  // scrape-race Lambda, which creates the manual classes, retires the provisional
+  // class, and cleans up predictions on reshaped/removed classes.
+  async saveManualLineups(raceId, lineups) {
+    const { data, errors } = await client.mutations.saveManualLineups({
+      raceId,
+      lineups: JSON.stringify(lineups),
+    });
+    if (errors?.length) throw new Error(errors[0].message);
+    return parseJsonResult(data);
+  },
+
   // ---- scoring --------------------------------------------------------------
   // The active points table (finishPosition -> points), sorted by position.
   // Falls back to the F1 default table when no ScoringRule rows exist yet.

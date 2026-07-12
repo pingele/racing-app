@@ -48,6 +48,7 @@ const schema = a.schema({
       entryCount: a.integer(),
       sortOrder: a.integer(),
       locked: a.boolean().default(false), // per-class prediction lock (independent of Race.predictionsLocked)
+      manual: a.boolean(), // true = admin-built heat/feature lineup (vs scraped); null = imported
     })
     .secondaryIndexes((index) => [index('raceId').name('byRace')])
     .authorization((allow) => [
@@ -189,6 +190,21 @@ const schema = a.schema({
   enterRaceResults: a
     .mutation()
     .arguments({ raceId: a.string().required(), results: a.json().required() })
+    .returns(a.json())
+    .handler(a.handler.function(scrapeRace))
+    .authorization((allow) => [allow.group('Admins')]),
+
+  // Build heat/feature lineups manually from an already-imported entry list,
+  // for when MyRacePass hasn't drawn them yet. `lineups` is a JSON object
+  // { divisions: [{ provisionalClassId, name, sessions: [{ raceType, entryIds }] }] }
+  // where entryIds reference the provisional entry-list class's Entry rows. The
+  // Lambda creates a "manual" RaceClass per session (cloning driver + mrpEntryId),
+  // retires the provisional class, and cascade-cleans predictions on removed or
+  // reshaped classes. Runs in the Lambda because that cleanup deletes owner-authed
+  // predictions the admin's browser can't touch.
+  saveManualLineups: a
+    .mutation()
+    .arguments({ raceId: a.string().required(), lineups: a.json().required() })
     .returns(a.json())
     .handler(a.handler.function(scrapeRace))
     .authorization((allow) => [allow.group('Admins')]),

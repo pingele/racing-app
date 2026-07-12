@@ -1226,3 +1226,28 @@ a.calendar-grid-race:hover,
   display: flex;
   gap: 0.5rem;
 }
+
+/* Build-lineups page (manual heat/feature assignment). */
+.lineup-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.lineup-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.lineup-spacer {
+  flex: 1 1 auto;
+}
+.lineup-counts {
+  margin: 0.25rem 0 0.75rem;
+}
+.lineup-assign {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.5rem;
+}
