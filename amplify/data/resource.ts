@@ -209,6 +209,17 @@ const schema = a.schema({
     .handler(a.handler.function(scrapeRace))
     .authorization((allow) => [allow.group('Admins')]),
 
+  // Read the entry-list field per division (full field + mrpEntryId) for the
+  // Build Lineups page, so it can offer every division's whole field — including
+  // ones whose provisional class was already retired when their Heats imported.
+  // A read only; persists nothing.
+  getRaceField: a
+    .query()
+    .arguments({ raceId: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(scrapeRace))
+    .authorization((allow) => [allow.group('Admins')]),
+
   // Delete predictions (and their scores) to reset the game. With `raceId`, only
   // that race's predictions are cleared; without it, every prediction across all
   // races is cleared for a fresh season. UserProfiles/logins are left intact.
