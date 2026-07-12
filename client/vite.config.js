@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (not 'autoUpdate') so a new deploy surfaces via the in-app
+      // reload prompt (see UpdatePrompt.jsx) instead of applying silently. The
+      // component registers the SW through useRegisterSW.
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         name: 'Vermeer Fantasy Racing',

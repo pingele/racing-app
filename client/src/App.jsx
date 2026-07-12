@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import NavBar from './components/NavBar.jsx';
 import Leaderboard from './components/Leaderboard.jsx';
+import UpdatePrompt from './components/UpdatePrompt.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Races from './pages/Races.jsx';
@@ -90,6 +91,7 @@ export default function App() {
 
   return (
     <>
+      <UpdatePrompt />
       <NavBar />
       {user ? (
         <div className="app-shell">
