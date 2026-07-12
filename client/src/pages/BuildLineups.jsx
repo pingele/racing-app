@@ -337,11 +337,27 @@ export default function BuildLineups() {
       const bits = [`${res?.classesCreated ?? 0} created`];
       if (res?.predictionsCleared) bits.push(`${res.predictionsCleared} predictions cleared`);
       if (res?.skippedExisting) bits.push(`${res.skippedExisting} skipped (already imported)`);
+      // Deliberately DON'T re-read from the server here. saveManualLineups just
+      // created the manual class + its entries and deleted the provisional one;
+      // getRace reads those back through eventually-consistent GSIs, so an
+      // immediate reload can return the lineup without its entries (or omit it
+      // entirely) and wipe the on-screen assignments — after which the next save
+      // would delete the now-"empty" class. Instead keep the current assignment
+      // state and just mark each saved division's provisional class consumed so a
+      // follow-up save won't reference a deleted class. A fresh page load later
+      // (indexes settled) round-trips the saved lineup normally.
+      const savedNames = new Set(payload.map((d) => (d.name || '').trim().toLowerCase()));
+      setDivisions((prev) =>
+        prev.map((d) =>
+          savedNames.has((d.canonicalName || '').trim().toLowerCase())
+            ? { ...d, provisional: null }
+            : d,
+        ),
+      );
       setBanner({
         type: 'success',
-        text: `Lineups saved for "${race.name}" — ${bits.join(', ')}. Players can predict them now.`,
+        text: `Lineups saved for "${race.name}" — ${bits.join(', ')}. Keep editing and Save again, or reload to see the latest.`,
       });
-      await load();
     } catch (err) {
       setBanner({ type: 'error', text: `Save failed: ${err.message}` });
     } finally {
